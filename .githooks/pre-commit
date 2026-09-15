@@ -1,0 +1,33 @@
+#!/bin/sh
+# Pre-commit gate. Enable once per clone:
+#
+#     npm run hooks          (git config core.hooksPath .githooks)
+#
+# Bypass deliberately with `git commit --no-verify` — for a WIP commit on a
+# branch, not for main.
+#
+# The whole gate runs in a couple of seconds, so it runs everything rather than
+# splitting fast checks into pre-commit and slow ones into pre-push.
+
+set -e
+
+if [ ! -d node_modules ]; then
+  echo "pre-commit: node_modules missing — run 'npm install' first" >&2
+  exit 1
+fi
+
+echo "→ syntax"
+npm run --silent syntax
+
+echo "→ lint"
+npm run --silent lint
+
+# Guards the invariants that fail SILENTLY, by producing a wrong number
+# rather than an error. This is the one that protects the ledger.
+echo "→ self check"
+npm run --silent selfcheck >/dev/null || { npm run --silent selfcheck; exit 1; }
+
+echo "→ tests"
+npm run --silent test >/dev/null 2>&1 || { npm run --silent test; exit 1; }
+
+echo "✓ pre-commit passed"

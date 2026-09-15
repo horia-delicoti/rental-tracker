@@ -1,0 +1,23 @@
+# Runtime data — created by running `node server.js` from app.web/.
+# This is a personal financial ledger: never commit it.
+data/
+plans/
+*.tmp
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Docusaurus (website/)
+.docusaurus/
+build/
+
+# Screenshots the desktop app drops here when files are shared into the chat.
+# Working images, not project assets — and this is a public repo.
+Claude outputs/
+
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

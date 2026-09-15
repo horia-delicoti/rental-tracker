@@ -1,0 +1,2821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- Substituted by the server as the page is sent (see APP_VERSION in server.js),
+     so a copy kept in a browser cache still knows which build it is and can ask
+     the server whether that is still the current one. -->
+<meta name="app-version" content="__APP_VERSION__" />
+<title>Rental Ledger</title>
+<!-- Inline so there is no second request and no 404 in the console on a box
+     with no internet. The mark is the roof as the chart: a pitched line over
+     three bars — the two halves of what the app does in one glyph. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232F6F62'/%3E%3Cpath d='M13 29 32 15l19 14' fill='none' stroke='%23fff' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='20' y='35' width='6' height='13' rx='2' fill='%235BA89A'/%3E%3Crect x='29' y='31' width='6' height='17' rx='2' fill='%23fff'/%3E%3Crect x='38' y='38' width='6' height='10' rx='2' fill='%23C99A2E'/%3E%3C/svg%3E" />
+<!-- Chart.js is vendored locally (public/chart.umd.min.js) so the page works
+     on a machine with no internet access, and never reaches out to a CDN. -->
+<!-- Runs before any style is parsed, so a dark-mode device never flashes the
+     light palette on its way to the dark one. Deliberately tiny and inline:
+     anything fetched would be too late to matter. -->
+<script>
+  try{
+    /* The app saves through lsSet, which JSON-encodes, so what is in storage is
+       "dark" WITH its quotes. Reading it raw and comparing to dark silently
+       never matched, and every load of a dark-mode ledger flashed light first
+       — the one thing this script exists to prevent. Unquote before comparing,
+       and still accept a bare value so a store written by an older build (or
+       by hand) is honoured too. */
+    var raw = localStorage.getItem("rl-theme");
+    var t = raw && raw.charAt(0) === '"' ? raw.slice(1, -1) : raw;
+    if(t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+  }catch(e){}   /* private mode, blocked storage: fall through to the device */
+</script>
+<script src="/chart.umd.min.js"></script>
+<style>
+  /* ===========================================================
+     PALETTE — "ledger paper": warm off-white background, deep
+     teal for money/profit, clay for tax, gold for expenses.
+     Defined as CSS variables so every colour lives in one place
+     and the JS chart code can read the same values (see c()).
+  ============================================================ */
+  :root{
+    /* Tells the browser which way round its own controls go — select popups,
+       date pickers, scrollbars. Without it they stay light on a dark page. */
+    color-scheme: light;
+    --ink:#1F2A28; --paper:#F4F6F3; --surface:#FFFFFF; --line:#E2E6E1;
+    --income:#5BA89A; --expense:#C99A2E; --profit:#2F6F62; --tax:#B5654A;
+    --partner:#88B7AC; --muted:#6B7670; --soft:#F7F9F7; --hair:#EEF1ED;
+    /* The two ledger add-buttons wear the colour of the lines they create:
+       a wash, a border and a text colour derived from --income / --expense. */
+    --in-soft:rgba(91,168,154,.12); --in-line:rgba(91,168,154,.38); --in-ink:#2C6A5D;
+    --out-soft:rgba(201,154,46,.12); --out-line:rgba(201,154,46,.40); --out-ink:#7E5A11;
+    /* A rental's colour is part of the rental, not of the stylesheet — it is
+       chosen in its own dialog and stored with it. */
+    /* Text that sits ON a filled accent, never on the page. In dark these flip
+       to the page's own near-black — white on a lifted hue is glare. */
+    --on-accent:#FFFFFF; --on-ink:#FFFFFF; --on-accent-soft:rgba(255,255,255,.72);
+    --dash:#C5CCC6;                                  /* the dashed "+ Year" tab */
+    --trash:rgba(181,101,74,.6);
+    --focus:rgba(47,111,98,.12);
+    --scrim:rgba(31,42,40,.45);                      /* behind a dialog */
+    --pop:0 12px 30px rgba(31,42,40,.14);            /* the settings menu */
+    --danger-bg:#FCEDE8; --danger-line:#E8C4B7; --danger-ink:#8C3A20;
+    --info-bg:#F3F7F5; --info-line:#CFE0D9; --info-ink:#39584E;
+    --serif:ui-serif,Georgia,"Iowan Old Style","Palatino Linotype",serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+
+  /* ---------- dark ----------
+     Same app, lit differently: the ledger-paper hues are lifted rather than
+     replaced, so a figure that is teal by day is the same teal by night.
+     Defined twice on purpose — once for an explicit choice, once for a device
+     that is dark and has not been told otherwise. Anything NOT restated here
+     keeps its light value, which is why the self check compares the two lists. */
+  :root[data-theme="dark"]{
+    color-scheme: dark;
+    --ink:#E8EDEA; --paper:#14181A; --surface:#1C2225; --line:#2A3338;
+    --income:#6FBFAF; --expense:#D9A83C; --profit:#4FA98F; --tax:#C9705A;
+    --partner:#4E8377; --muted:#8A9791; --soft:#181D20; --hair:#232B2F;
+    --in-soft:rgba(111,191,175,.16); --in-line:rgba(111,191,175,.45); --in-ink:#6FBFAF;
+    --out-soft:rgba(217,168,60,.16); --out-line:rgba(217,168,60,.45); --out-ink:#D9A83C;
+    --on-accent:#0F1416; --on-ink:#14181A; --on-accent-soft:rgba(15,20,22,.66);
+    --dash:#3A464B;
+    --trash:rgba(201,112,90,.7);
+    --focus:rgba(79,169,143,.22);
+    --scrim:rgba(0,0,0,.6);
+    --pop:0 16px 40px rgba(0,0,0,.5);
+    --danger-bg:#2A1D1A; --danger-line:#5A342B; --danger-ink:#E8A08C;
+    --info-bg:#172220; --info-line:#2B3F39; --info-ink:#8FC3B4;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      color-scheme: dark;
+      --ink:#E8EDEA; --paper:#14181A; --surface:#1C2225; --line:#2A3338;
+      --income:#6FBFAF; --expense:#D9A83C; --profit:#4FA98F; --tax:#C9705A;
+      --partner:#4E8377; --muted:#8A9791; --soft:#181D20; --hair:#232B2F;
+      --in-soft:rgba(111,191,175,.16); --in-line:rgba(111,191,175,.45); --in-ink:#6FBFAF;
+      --out-soft:rgba(217,168,60,.16); --out-line:rgba(217,168,60,.45); --out-ink:#D9A83C;
+      --on-accent:#0F1416; --on-ink:#14181A; --on-accent-soft:rgba(15,20,22,.66);
+      --dash:#3A464B;
+      --trash:rgba(201,112,90,.7);
+      --focus:rgba(79,169,143,.22);
+      --scrim:rgba(0,0,0,.6);
+      --pop:0 16px 40px rgba(0,0,0,.5);
+      --danger-bg:#2A1D1A; --danger-line:#5A342B; --danger-ink:#E8A08C;
+      --info-bg:#172220; --info-line:#2B3F39; --info-ink:#8FC3B4;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       font-size:15px;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 60px}
+  .serif{font-family:var(--serif)}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .muted{color:var(--muted)}
+  /* ---------- header ----------
+     One row: identity, then place, then actions — the brand, the view nav and
+     the backup buttons all sit on the same line. The auto margin on .btns
+     absorbs the free space, so the nav stays packed against the brand instead
+     of being spread to the middle of the row by space-between. */
+  header{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;
+         border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:20px}
+  h1{font-family:var(--serif);font-size:27px;margin:0;font-weight:600}
+  .brand{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+  /* The mark carries its own plate and its own colours — the same five shapes
+     as the favicon, so the tab, the header and the installed icon are one mark.
+     Literal hexes, not tokens: a brand plate that changed with the theme would
+     be two logos. */
+  .brand svg{width:28px;height:28px;flex:none}
+  .btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto}
+  /* ---------- settings menu ----------
+     One control in the header instead of three: the backup actions are rare and
+     deliberate, so they belong behind a menu rather than occupying the row. */
+  .menuwrap{position:relative}
+  /* Flush with the page: these two are always-present affordances, not actions
+     competing with the view tabs. They gain a surface only on hover, and the
+     rates button borrows it again to report what happened. */
+  #setMenuBtn{background:none;border-color:transparent;color:var(--muted);padding:7px;line-height:0}
+  #setMenuBtn:hover{background:var(--surface);border-color:var(--line);color:var(--ink)}
+  /* Display currency: a view control, so it sits with the other header
+     affordances rather than in the dialog that changes what is stored. */
+  /* width:auto beats the global `input,select{width:100%}` — without it the
+     picker takes the whole header row and pushes the settings button onto a
+     line of its own. */
+  #dispCur{width:auto;border:1px solid var(--line);border-radius:8px;background:var(--surface);
+       color:var(--ink);font-family:var(--mono);font-size:13px;padding:7px 8px;cursor:pointer}
+  .convbar{display:none;background:var(--info-bg);border:1px solid var(--info-line);border-radius:10px;
+       padding:9px 13px;font-size:12.5px;color:var(--info-ink);margin-bottom:14px;line-height:1.5}
+  .convbar.show{display:block}
+  /* Flush like the Rates button beside it: these report state rather than invite
+     a press, so they stay quiet until hovered. */
+  #themeBtn{background:none;border-color:transparent;color:var(--muted);padding:7px;line-height:0}
+  #themeBtn:hover{background:var(--surface);border-color:var(--line);color:var(--ink)}
+  #themeBtn .tico{width:19px;height:19px;flex:none;stroke-width:1.8;display:block}
+  #ratesBtn{background:none;border-color:transparent;color:var(--muted);padding:8px 9px}
+  #ratesBtn:hover{background:var(--surface);border-color:var(--line);color:var(--ink)}
+  #ratesBtn.ok{background:var(--surface);border-color:var(--profit);color:var(--profit)}
+  #ratesBtn.bad{background:var(--surface);border-color:var(--tax);color:var(--tax)}
+  #ratesBtn:disabled{opacity:.6;cursor:default}
+  .menu{position:absolute;right:0;top:calc(100% + 6px);z-index:45;display:none;
+       background:var(--surface);border:1px solid var(--line);border-radius:11px;
+       padding:6px;width:258px;box-shadow:var(--pop)}
+  .menu.open{display:block}
+  .mrow{display:block;width:100%;text-align:left;border:0;background:none;cursor:pointer;
+       font-family:inherit;font-size:13.5px;color:var(--ink);padding:9px 10px;border-radius:7px;
+       text-decoration:none}
+  .mrow:hover{background:var(--soft)}
+  .msep{height:1px;background:var(--hair);margin:5px 8px}
+  /* The version row is not an action — it states what this copy IS, and offers
+     the one button that can change that answer. */
+  .mver{display:flex;align-items:center;gap:8px;padding:7px 10px 8px;font-size:12px;color:var(--muted)}
+  .mver .v{font-family:var(--mono);font-size:11.5px}
+  .mver button{margin-left:auto;padding:5px 9px;font-size:12px;white-space:nowrap}
+  .btn{display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);
+       color:var(--ink);padding:8px 14px;border-radius:8px;font-size:14px;cursor:pointer;text-decoration:none}
+  .btn:hover{border-color:var(--profit)}
+  /* ---------- view tabs (Overview + one per rental) ----------
+     Beside the title, and wrapping to a second line past five or six rentals —
+     which is cheaper than a column that reserves space it cannot fill. */
+  #viewNav{display:flex;flex-wrap:wrap;gap:8px;flex:0 0 auto}
+  .vtab{display:inline-flex;align-items:center;gap:8px;font-family:var(--serif);font-size:15px;font-weight:600;
+       padding:8px 16px;border-radius:10px;border:1px solid var(--line);background:var(--surface);
+       cursor:pointer;color:var(--ink)}
+  .vtab.on{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+  .vtab:hover:not(.on){border-color:var(--profit);color:var(--profit)}
+  .vtab .rdot{width:9px;height:9px;border-radius:3px;flex:none}
+  .vtab svg{width:14px;height:14px;flex:none;stroke-width:1.9}
+  /* ---------- the year row ----------
+     Years on the left, and on a rental's page its note, links and Edit at the
+     right end. One row, no repeated heading, and the figures start higher. */
+  .yearrow{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;margin-bottom:16px}
+  .yearrow #tabs{margin-bottom:0}
+  .rtools{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .rtools:empty{display:none}
+  .rtools a,.notebtn{border:1px solid var(--line);background:var(--surface);color:var(--muted);
+       border-radius:8px;text-decoration:none;cursor:pointer;font-family:inherit}
+  .rtools a{width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center}
+  .rtools a:hover,.notebtn:hover{border-color:var(--profit);color:var(--profit)}
+  .rtools a svg{width:14px;height:14px;stroke-width:1.9}
+  .notebtn{padding:6px 11px;font-size:12.5px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .notebtn[aria-expanded="true"]{border-color:var(--profit);color:var(--profit)}
+  .rsep{width:1px;height:22px;background:var(--line)}
+  /* The note, opened from that button: a Wi-Fi code is worth reading rather than
+     hovering, so it gets a line of its own — but only when asked for. */
+  .pnote{font-size:12.5px;color:var(--muted);margin:-8px 0 16px;line-height:1.55;max-width:820px;white-space:pre-wrap}
+  .pnote b{color:var(--ink);font-weight:600}
+  /* ---------- year tabs ---------- */
+  #tabs{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:20px}
+  /* The Apr–Mar framing used to sit under the title. It belongs next to the
+     years it describes — "2025/26" is otherwise ambiguous between the two. */
+  .fyhint{color:var(--muted);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+  .splithead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+  .splithead .fyhint{margin-left:auto}
+  /* ---------- people ---------- */
+  .pnamerow{display:flex;align-items:center;gap:9px;min-width:0}
+  /* Initials on the person's own colour: with three or more owners the colour
+     is what tells two rows apart at a glance, as it does for the rentals. */
+  /* The plate is the person's stored colour, so its text colour is computed
+     from that colour (see readableOn) rather than set here — a token could not
+     know whether it is sitting on the dark teal or the pale green. */
+  .pav{width:26px;height:26px;border-radius:50%;flex:none;display:inline-flex;align-items:center;
+       justify-content:center;font-size:11px;font-weight:600;font-style:normal}
+  .rateedit{display:flex;align-items:center;gap:8px;flex:none}
+  .peoplefoot{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-family:var(--mono);
+       font-size:12px;color:var(--muted);border-top:1px solid var(--hair);padding-top:9px;margin-top:2px}
+  /* A <button> does NOT inherit colour from the page: without this the year
+     tabs fell back to the browser's own button text — black on a dark card. */
+  .tab{font-family:var(--mono);font-size:13px;padding:6px 14px;border-radius:999px;border:1px solid var(--line);
+       background:var(--surface);color:var(--ink);cursor:pointer}
+  .tab.on{background:var(--profit);color:var(--on-accent);border-color:var(--profit)}
+  .tab.add{border-style:dashed;border-color:var(--dash);color:var(--muted)}
+  .tab.add:hover{border-color:var(--profit);color:var(--profit)}
+  /* On a narrow screen the three header groups no longer fit on one line.
+     Brand and buttons keep the first row; the nav takes the full width below,
+     where its tabs stay finger-sized instead of shrinking. */
+  @media(max-width:720px){
+    h1{font-size:22px}
+    .brand svg{width:24px;height:24px}
+    /* Identity, then place, then actions — the same order as the desktop row,
+       stacked. Both lower rows take the full width and divide it evenly, so
+       every control stays finger-sized instead of shrinking to fit. */
+    #viewNav{order:2;width:100%}
+    .vtab{flex:1;justify-content:center;text-align:center;padding:8px 10px;font-size:13px}
+    /* The tools drop below the years rather than squeezing them. */
+    .rtools{margin-left:0;width:100%}
+    /* The settings button is small enough to stay on the brand's row, so the
+       views get the whole second line to themselves. */
+    .menu{width:min(260px,calc(100vw - 32px))}
+  }
+  /* ---------- rentals ---------- */
+  /* The one button in the header row that creates something, so it is the only
+     one wearing the accent. */
+  #addRentalBtn{background:var(--profit);color:var(--on-accent);border-color:var(--profit)}
+  #addRentalBtn:hover{filter:brightness(1.07)}
+  /* What a rental carries besides its numbers: the places you actually go for
+     it, and whatever you would otherwise keep on a sticky note. */
+  .rhead{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:6px}
+  .rhead h2{margin:0;font-size:22px}
+  .rlinks{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:2px 0 14px}
+  .rlink{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);
+       border-radius:999px;padding:5px 12px;font-size:12.5px;color:var(--ink);text-decoration:none}
+  .rlink:hover{border-color:var(--profit);color:var(--profit)}
+  .rlink svg{width:13px;height:13px;flex:none;stroke-width:1.9}
+  .rnote{font-size:12.5px;color:var(--muted);background:var(--soft);border:1px solid var(--hair);
+       border-radius:9px;padding:9px 12px;margin:0 0 16px;line-height:1.55;max-width:820px;white-space:pre-wrap}
+  .rnote b{color:var(--ink);font-weight:600}
+  .rdot{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+  /* Colour picker in the rental dialog. */
+  .swatches{display:flex;gap:8px;flex-wrap:wrap}
+  .sw{width:28px;height:28px;border-radius:8px;border:2px solid transparent;cursor:pointer;padding:0}
+  .sw.on{border-color:var(--ink)}
+  .field{margin-bottom:12px}
+  .field label{display:block;font-size:13px;margin-bottom:5px}
+  .fgrid .wide{grid-column:1/-1}
+  .fgrid label{display:block;font-size:13px;margin-bottom:5px}
+  .fgrid .opt{color:var(--muted);font-weight:400}
+  .amtwrap{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:7px;
+       padding:0 10px;background:var(--surface)}
+  /* A flex child, not an overlay: the symbol takes the width it needs, so a
+     three-character one like MX$ pushes the number along instead of sitting
+     on top of it. */
+  .amtwrap .cur{color:var(--muted);font-family:var(--mono);font-size:13px;flex:none;white-space:nowrap}
+  .amtwrap input{border:0;background:none;padding:8px 0;width:100%}
+  .amtwrap input:focus{outline:none;box-shadow:none}
+  .field textarea{width:100%;border:1px solid var(--line);border-radius:7px;padding:8px 10px;font-size:14px;
+       background:var(--surface);color:var(--ink);font-family:inherit;min-height:74px;resize:vertical}
+  .fhint{font-size:11.5px;color:var(--muted);margin-top:4px}
+  .btn.danger{background:none;border-color:var(--danger-line);color:var(--danger-ink)}
+  .btn.danger:hover{background:var(--danger-bg)}
+  /* First run: no rentals yet, so there is nothing to show but the way in. */
+  #firstRun{text-align:center;padding:52px 20px;background:var(--surface);border:1px solid var(--line);
+       border-radius:14px;margin-top:8px}
+  #firstRun h2{font-size:23px;margin:0 0 8px}
+  #firstRun p{max-width:520px;margin:0 auto 20px;color:var(--muted);font-size:14px;line-height:1.6}
+  /* ---------- a card's heading row ---------- */
+  .cardhead{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+  .cardhead h2{margin:0;display:flex;align-items:center;gap:8px}
+  .cardhead .grow{flex:1;min-width:6px}
+  /* ---------- the ledger's own head ----------
+     Filter chips read the list; the two add buttons write to it. Each add
+     button is tinted with the colour its lines are shown in, so the choice is
+     made by the button rather than inside the window. Tinted rather than
+     filled: the one filled button on this page is "+ Rental" in the header,
+     and two more would leave nothing quiet to read against. */
+  .chip{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;
+       padding:4px 12px;font-size:12px;font-family:inherit;cursor:pointer}
+  .chip:hover{color:var(--ink)}
+  .chip.on{background:var(--soft);border-color:var(--ink);color:var(--ink);font-weight:600}
+  .kbtn{border-radius:8px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer;border:1px solid}
+  .kbtn.in{background:var(--in-soft);border-color:var(--in-line);color:var(--in-ink)}
+  .kbtn.out{background:var(--out-soft);border-color:var(--out-line);color:var(--out-ink)}
+  .kbtn:hover{filter:brightness(.97)}
+  /* A title's icon: the same weight as the text it sits beside. */
+  .h2ico{width:17px;height:17px;flex:none;stroke-width:1.9;vertical-align:-2px}
+  /* ---------- ledger rows ---------- */
+  /* Tight on purpose: a ledger is read by scanning down it, and every extra
+     pixel between lines is one more that a year of rent will not fit on. */
+  .dayhead{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+       color:var(--muted);margin-top:9px;padding-bottom:3px;border-bottom:1px solid var(--hair)}
+  .dayhead:first-child{margin-top:0}
+  .catico{width:25px;height:25px;border-radius:8px;flex:none;display:inline-flex;align-items:center;
+       justify-content:center;font-size:13px;font-style:normal}
+  .lrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:9px;align-items:center;
+       padding:4px;border-radius:8px;cursor:pointer}
+  .lrow:hover{background:var(--soft)}
+  .lrow .body{min-width:0}
+  .lrow .n{font-size:13.5px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lrow .meta{display:flex;gap:8px;font-size:11px;line-height:1.3;color:var(--muted);margin-top:1px}
+  .lrow .amts{text-align:right;font-family:var(--mono)}
+  .lrow .amt{font-size:13.5px;line-height:1.3;white-space:nowrap}
+  /* Income and expenses share one list, so the sign and the colour are what
+     tell them apart at a glance — which only works if both can be read.
+     --income and --expense are chart fills: a bar is a solid block and can be
+     pale, 13px of text on paper cannot. The -ink pair is the same two hues
+     taken to a readable weight, and is what every figure uses. */
+  .lrow .amt.in{color:var(--in-ink)}
+  .lrow .amt.out{color:var(--out-ink)}
+  /* What was actually paid, when that is not what the column is showing. */
+  .lrow .orig{display:block;font-size:10.5px;line-height:1.3;color:var(--muted)}
+  .lrow .pencil{color:var(--muted);font-size:13px;opacity:0}
+  .lrow:hover .pencil,.lrow:focus-visible .pencil{opacity:1}
+  /* ---------- breakdown bars ---------- */
+  .brow{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:0 10px;align-items:center;padding:7px 0}
+  .brow .catico{width:26px;height:26px;font-size:13px;border-radius:8px}
+  .brow .bl{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .brow .ba{font-family:var(--mono);font-size:13px;white-space:nowrap}
+  .brow .ba .pc{color:var(--muted);font-size:11px;margin-left:6px}
+  .brow .bar{grid-column:2/-1;height:7px;border-radius:4px;background:var(--hair);overflow:hidden;margin-top:5px}
+  .brow .bar > i{display:block;height:100%;border-radius:4px}
+  /* ---------- cards ---------- */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+  h2{font-family:var(--serif);font-size:18px;margin:0 0 12px;font-weight:600}
+  /* ---------- KPI row ---------- */
+  #kpis,#kpisProp{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+  @media(max-width:720px){#kpis,#kpisProp{grid-template-columns:repeat(2,1fr)}}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .kpi .l{display:flex;align-items:center;gap:6px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+  .kpi .v{font-family:var(--mono);font-size:22px}
+  .kpi .v.big{font-size:26px}
+  .kdelta{font-family:var(--mono);font-size:11px;margin-top:4px}
+  .dot{width:9px;height:9px;border-radius:2px;display:inline-block}
+  /* ---------- main grid: properties (left) + split panel (right) ---------- */
+  .main{display:grid;grid-template-columns:2fr 1fr;gap:16px;align-items:start}
+  @media(max-width:900px){.main{grid-template-columns:1fr}}
+  .col{display:flex;flex-direction:column;gap:16px}
+  /* ---------- property page: ledger (2.5 of 4) + monthly chart (1.5 of 4) ---------- */
+  .propmain{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+  @media(max-width:900px){.propmain{grid-template-columns:1fr}}
+  .section-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 8px}
+  /* ---------- run-rate projection strip (Overview, current FY only) ---------- */
+  .rr{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  @media(max-width:720px){.rr{grid-template-columns:repeat(2,1fr)}}
+  .rr .cell{background:var(--soft);border-radius:8px;padding:10px 12px}
+  .rr .rl{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .rr .rv{font-family:var(--mono);font-size:18px;margin-top:3px}
+  /* ---------- Rental comparison table (Overview) ---------- */
+  /* With five rentals the comparison is genuinely wider than a phone. A table is
+     the one thing allowed to scroll sideways — inside its own card, never by
+     widening the page. */
+  #compareStats{overflow-x:auto;margin-bottom:12px}
+  .cmp{display:grid;grid-template-columns:auto 1fr 1fr;gap:4px 14px;font-size:14px;min-width:max-content}
+  .cmp .ch{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding-bottom:2px}
+  .cmp .cl{color:var(--muted);font-size:13px}
+  .cmp .cv{font-family:var(--mono);text-align:right}
+  .cmp .cv.win{font-weight:600}
+  .ledger{display:flex;flex-direction:column;gap:6px}
+  /* 5 columns: month · note · amount · edit · delete */
+  .lrow{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:8px;align-items:center;font-size:14px}
+  .lrow .m{font-family:var(--mono);color:var(--muted);font-size:13px;white-space:nowrap}
+  .lrow .amt{font-family:var(--mono);text-align:right}
+  .trash{border:0;background:none;color:var(--trash);cursor:pointer;padding:2px;font-size:14px;line-height:1}
+  .trash:hover{color:var(--tax)}
+  .pencil{border:0;background:none;color:var(--muted);cursor:pointer;padding:2px;font-size:13px;line-height:1}
+  .pencil:hover{color:var(--profit)}
+  .empty{color:var(--muted);font-size:13px;font-style:italic;padding:2px 0}
+  /* add-entry row */
+  /* minmax(0,…) on every column, or the month and category controls take their
+     intrinsic width and leave the note a sliver in a narrower column. */
+  input,select{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:7px 9px;
+       font-size:14px;color:var(--ink);width:100%;font-family:inherit}
+  input.mono,select.mono{font-family:var(--mono)}
+  input:focus,select:focus{outline:none;border-color:var(--profit);box-shadow:0 0 0 3px var(--focus)}
+  .addbtn{border:0;background:var(--profit);color:var(--on-accent);border-radius:7px;width:32px;height:32px;font-size:18px;
+       cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
+  .addbtn.warn{background:var(--expense)}
+  /* ---------- profit-split panel ---------- */
+  .person{padding:12px 0;border-bottom:1px solid var(--hair)}
+  .person:last-child{border-bottom:0}
+  .person .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .person .pname{font-weight:600}
+  .ratebox{position:relative;width:84px}
+  .ratebox input{font-family:var(--mono);text-align:right;padding-right:20px}
+  .ratebox .pc{position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+  .minis{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center}
+  .mini{background:var(--soft);border-radius:8px;padding:8px 4px}
+  .mini .ml{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .mini .mv{font-family:var(--mono);font-size:14px;margin-top:2px}
+  .splitnote{font-size:12px;color:var(--muted);margin-top:6px}
+  /* ---------- optional "estimate %" helper (button + modal) ---------- */
+  .estbtn{background:none;border:0;color:var(--profit);font-size:12px;cursor:pointer;padding:0;text-decoration:underline}
+  .estbtn:hover{color:var(--ink)}
+  .modal-bg{position:fixed;inset:0;background:var(--scrim);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}
+  .modal-bg.open{display:flex}
+  .modal{background:var(--surface);border:1px solid var(--line);border-radius:14px;max-width:440px;width:100%;padding:20px;max-height:90vh;overflow:auto}
+  .modal h3{font-family:var(--serif);font-size:18px;margin:0 0 4px}
+  .modal .sub{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5}
+  .frow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+  .frow label{font-size:13px}
+  .frow .fld{width:150px}
+  /* ---------- currency rows (Settings › Currency rate) ---------- */
+  .err{background:var(--danger-bg);border:1px solid var(--danger-line);color:var(--danger-ink);border-radius:8px;padding:8px 11px;
+       font-size:13px;margin-bottom:12px;display:none}
+  .err.show{display:block}
+  .currow{display:grid;grid-template-columns:80px 70px 1fr auto;gap:6px 8px;align-items:center;margin-bottom:10px}
+  .cdel{border:0;background:none;color:var(--muted);font-size:15px;cursor:pointer;padding:4px 6px;border-radius:6px}
+  .cdel:hover{background:var(--soft);color:var(--tax)}
+  .cdel:disabled{opacity:.25;cursor:default}
+  .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+  .fgrid > div{min-width:0}
+  .fgrid label,.addcur label{display:block;font-size:13px;margin-bottom:5px}
+  .addcur{margin-top:12px}
+  .modal select{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+       font-size:14px;background:var(--surface);color:var(--ink)}
+  .modal select:disabled{background:var(--soft);color:var(--muted)}
+  .currow input{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px;
+       background:var(--surface);color:var(--ink);width:100%}
+  .currow .cc{background:var(--soft);color:var(--muted)}
+  /* Its own row under the inputs: it is a sentence about the rate box above it,
+     and squeezing it into the grid would cost the rate box its width. */
+  .curhint{grid-column:1/-1;font-size:11px;color:var(--muted);margin-top:-2px}
+  .curhint.auto{color:var(--profit)}
+  /* ---------- info disclosure ----------
+     The explanation is worth having and worth reading once. Behind an (i) it
+     stays available without standing between you and the field every time. */
+  .modalhead{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .modalhead h3{margin:0}
+  .modalhead .btn{margin-left:auto}
+  .ibtn{width:22px;height:22px;flex:none;border-radius:50%;border:1px solid var(--line);
+       background:var(--surface);color:var(--muted);font-family:var(--serif);font-size:13px;
+       line-height:1;cursor:pointer;padding:0}
+  .ibtn:hover,.ibtn[aria-expanded="true"]{border-color:var(--profit);color:var(--profit)}
+  .info{display:none;background:var(--soft);border:1px solid var(--hair);border-radius:10px;
+       padding:12px 14px;margin-bottom:14px;font-size:12.5px;line-height:1.6;color:var(--muted)}
+  .info.open{display:block}
+  .info p{margin:0 0 9px}
+  .info p:last-child{margin-bottom:0}
+  details.bands{margin:6px 0}
+  details.bands summary{font-size:12px;color:var(--muted);cursor:pointer}
+  .bandgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .bandgrid label{font-size:11px;color:var(--muted);display:block}
+  .bandgrid input{margin-top:3px}
+  .calc-result{background:var(--soft);border-radius:10px;padding:14px;margin:12px 0;text-align:center}
+  .calc-result .big{font-family:var(--mono);font-size:26px;color:var(--profit);font-weight:600}
+  .calc-result .det{font-size:12px;color:var(--muted);margin-top:4px}
+  .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+  .modal .note{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
+  /* ---------- snapshot-restore modal list ---------- */
+  .snaprow{display:flex;align-items:center;justify-content:space-between;gap:10px;
+       padding:9px 2px;border-bottom:1px solid var(--hair);font-size:13px}
+  .snaprow:last-child{border-bottom:0}
+  .snaprow .when{font-family:var(--mono)}          /* snapshot timestamp */
+  .snaprow .sz{color:var(--muted);font-size:12px}  /* file size hint */
+  /* ---------- charts ---------- */
+  .charts2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;margin-top:16px}
+  @media(max-width:900px){.charts2{grid-template-columns:minmax(0,1fr)}}
+  /* Every layout grid gets the same treatment: a child that may not shrink sets
+     the page width, and the whole thing scrolls sideways on a narrow screen. */
+  .charts2 > *,.main > *,.propmain > *,#kpis > *,#kpisProp > *,.rr > *,#lifetime > *{min-width:0}
+  canvas{max-height:260px}
+  .flowcap{font-size:12px;color:var(--muted);margin-top:8px}
+  /* ---------- lifetime strip ---------- */
+  #lifetime{background:var(--profit);color:var(--on-accent);border-radius:12px;padding:18px;margin-top:16px;
+       display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  @media(max-width:720px){#lifetime{grid-template-columns:repeat(2,1fr)}}
+  #lifetime .ll{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--on-accent-soft)}
+  #lifetime .lv{font-family:var(--mono);font-size:18px;margin-top:3px}
+  .foot{font-size:12px;color:var(--muted);margin-top:18px;line-height:1.6;max-width:760px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== header: brand + view nav + Save/Load buttons, all on one line ===== -->
+  <header>
+    <!-- Just the name. It used to be the current view's title, which said the
+         same thing as the highlighted tab two controls along — and saying it
+         twice invites them to disagree. -->
+    <h1 class="brand">
+      <!-- The same mark as the favicon, drawn rather than an emoji: it renders
+           identically on a device with no colour-emoji font, and the three bars
+           keep their own colours instead of inheriting the text's. -->
+      <svg viewBox="0 0 64 64" aria-hidden="true" class="mark">
+        <rect width="64" height="64" rx="14" fill="#2F6F62"/>
+        <path d="M13 29 32 15l19 14" fill="none" stroke="#fff" stroke-width="4.4"
+              stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="20" y="35" width="6" height="13" rx="2" fill="#5BA89A"/>
+        <rect x="29" y="31" width="6" height="17" rx="2" fill="#fff"/>
+        <rect x="38" y="38" width="6" height="10" rx="2" fill="#C99A2E"/>
+      </svg>
+      Rental Ledger
+    </h1>
+
+    <!-- Overview and one tab per rental, beside the title. The open tab names
+         the rental, so its page does not repeat it as a heading. -->
+    <div id="viewNav"></div>
+
+    <div class="btns">
+      <!-- The rate refresh, on the page rather than buried in the dialog: it is
+           the one thing here you might press without wanting to change anything.
+           The label carries the result, so there is no toast to miss. -->
+      <button class="btn" id="ratesBtn" title="Update the rates from the ECB">↻ <span id="ratesLbl">Rates</span></button>
+      <!-- Viewing in another currency. It changes nothing on disk: every figure
+           stays recorded in the base, and the strip below says so whenever what
+           you are looking at is not what is stored. -->
+      <select id="dispCur" class="mono" aria-label="Show amounts in" title="Show amounts in"></select>
+      <!-- One control, cycling light → dark → auto. Its icon and label are built
+           from THEME_MODES so they cannot disagree with the mode. -->
+      <button class="btn" id="themeBtn"></button>
+      <div class="menuwrap">
+        <button class="btn" id="setMenuBtn" aria-haspopup="menu" aria-expanded="false"
+                aria-label="Settings" title="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <div class="menu" id="setMenu" role="menu">
+          <button class="mrow" id="fxBtn">⚙ Currency rate</button>
+          <div class="msep"></div>
+          <!-- Save is a plain link to the export endpoint; `download` forces a file save -->
+          <a class="mrow" href="/api/export" download>⬇ Save a backup</a>
+          <!-- Load opens a hidden file picker (wired up in JS below) -->
+          <button class="mrow" id="loadBtn">⬆ Load a backup</button>
+          <!-- Restore lists the server's rolling snapshots (auto-taken before every change) -->
+          <button class="mrow" id="restoreBtn">⟲ Restore a snapshot</button>
+          <div class="msep"></div>
+          <div class="msep"></div>
+          <div class="mver" data-ver><span class="v"></span>
+            <button class="btn" data-checkupd>Check for updates</button></div>
+        </div>
+      </div>
+      <!-- The only button here that creates something rather than changing a
+           view or a setting, so it sits last and carries the accent. -->
+      <button class="btn" id="addRentalBtn">+ Rental</button>
+      <!-- Outside the menu: the menu closes on any click inside it, and a file
+           picker that is removed from view mid-click never opens. -->
+      <input id="fileInput" type="file" accept="application/json" style="display:none" />
+    </div>
+  </header>
+
+  <!-- Containers below are EMPTY on purpose: the JS fills them in render().
+       Keeping markup minimal here means there's one source of truth (the JS). -->
+
+  <div class="convbar" id="convBar"></div>
+
+  <!-- Shown only while there are no rentals. Everything else is hidden: an app
+       with no data and eight blank charts looks broken rather than new. -->
+  <div id="firstRun" style="display:none">
+    <h2 data-icon="home" data-icon-color="--profit">No rentals yet</h2>
+    <p>A rental is a property you record income and expenses against. Add one to start — you can
+      keep its Airbnb listing, dashboard and router links with it, along with any note you would
+      otherwise put on a sticky.</p>
+    <button class="btn" id="firstRentalBtn" style="background:var(--profit);color:var(--on-accent);border-color:var(--profit)">+ Add your first rental</button>
+  </div>
+  <!-- The year tabs, and — on a rental's page — its note, links and Edit at the
+       far end of the same row. They take space that was already empty, so the
+       rental's page opens straight onto its figures. -->
+  <div class="yearrow" id="yearRow">
+    <div id="tabs"></div>     <!-- fiscal-year pill tabs (shown on every view) -->
+    <div class="rtools" id="rentalTools"></div>
+  </div>
+  <div class="pnote" id="rentalNote" style="display:none"></div>
+
+  <!-- ===== OVERVIEW VIEW: combined totals + both-property comparisons =====
+       Never shows a single property's ledger — just the numbers that only
+       make sense combined (totals, tax split, all-years history). -->
+  <div id="overviewView">
+    <div id="kpis"></div>     <!-- income / expenses / profit / tax cards, combined -->
+
+    <!-- run-rate projection: only rendered for the CURRENT fiscal year
+         (a finished year's "projection" is just its actuals) -->
+    <div class="card" id="runrateCard" style="margin-bottom:16px;display:none">
+      <h2 id="rrTitle">Run-rate projection</h2>
+      <div id="runrate"></div>
+      <div class="flowcap" id="rrCap"></div>
+    </div>
+
+    <!-- profit split + property comparison, side by side -->
+    <div class="charts2">
+      <div class="card" id="splitCard">
+        <!-- The Apr–Mar framing sits with the figures it qualifies rather than
+             beside the year pills, where it was competing with them for the eye. -->
+        <h2 class="splithead" data-icon="split" data-icon-color="--profit">Profit split
+          <span class="muted" id="splitRatio" style="font-weight:400;font-size:13px"></span>
+          <span class="fyhint">fiscal year Apr–Mar</span>
+          <button class="kbtn in" data-act="new-person" style="margin-left:8px">+ Person</button></h2>
+        <div id="split"></div>
+        <div class="splitnote">Net profit across all rentals is split by each person's share, then that
+          share is taxed at their own rate for this year.</div>
+      </div>
+      <div class="card" id="compareCard">
+        <h2 id="compareTitle">Comparison</h2>
+        <div id="compareStats"></div>
+        <canvas id="chartCompare" style="max-height:180px"></canvas>
+      </div>
+    </div>
+
+    <!-- monthly cash flow for the selected fiscal year, every rental combined -->
+    <div class="charts2">
+      <div class="card" style="grid-column:1/-1">
+        <h2 id="monthlyTitle">Monthly cash flow</h2>
+        <canvas id="chartMonthly"></canvas>
+        <div class="flowcap" id="monthlyCap"></div>
+      </div>
+    </div>
+
+    <!-- selected-year expense categories (combined) + tax paid by person -->
+    <div class="charts2">
+      <div class="card">
+        <h2 id="catAllTitle">Expenses by category</h2>
+        <div id="catBarsAll"></div>
+        <div class="flowcap" id="catCapAll"></div>
+      </div>
+      <div class="card"><h2 data-icon="people" data-icon-color="--tax">Tax paid by person</h2><canvas id="chartTax"></canvas></div>
+    </div>
+
+    <!-- all-years comparison -->
+    <div class="charts2">
+      <div class="card" style="grid-column:1/-1"><h2 data-icon="years" data-icon-color="--profit">Across all years</h2><canvas id="chartYears"></canvas></div>
+    </div>
+
+    <!-- lifetime totals strip -->
+    <div id="lifetime"></div>
+  </div>
+
+  <!-- ===== PROPERTY VIEW: one rental at a time =====
+       Ledger + charts are all scoped to whichever rental is selected in
+       viewNav — nothing from any other rental appears here. -->
+  <div id="propertyView">
+    <div id="kpisProp"></div>   <!-- income / expenses / profit / tax cards, THIS property only -->
+
+    <!-- Profit split lives on Overview only — it is a per-person, all-rentals
+         concept (every rental's profit divided between the owners), so it does
+         not belong duplicated on a single rental's page. -->
+    <!-- One ledger, not two: money in and money out are the same account read
+         in date order, and splitting them made you look in two places to see
+         what a month did. The kind is chosen by which button you press, and
+         the chips read back one side without breaking the list apart.
+         The charts that summarise the ledger sit beside it, so a tall list
+         never has an empty half-page next to it.
+         Note: rent often arrives combined for 2–3 months at once, so single
+         empty months in the cash flow are normal, not missed payments. -->
+    <div class="propmain">
+      <div class="col" id="properties"></div>
+      <div class="col">
+        <div class="card">
+          <h2 id="catTitle">Expenses by category</h2>
+          <div id="catBars"></div>
+          <div class="flowcap" id="catCap"></div>
+        </div>
+        <div class="card">
+          <h2 id="monthlyPropTitle">Monthly cash flow</h2>
+          <canvas id="chartMonthlyProp"></canvas>
+          <div class="flowcap" id="monthlyCapProp"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- this property's history across all years -->
+    <div class="charts2">
+      <div class="card" style="grid-column:1/-1"><h2 id="propYearsTitle">Across all years</h2><canvas id="chartPropYears"></canvas></div>
+    </div>
+  </div>
+
+  <p class="foot">
+    Estimate only — not tax advice. Net profit per rental = income received − expenses; the combined profit is
+    divided between the people you have added, by each one's share, then each share is taxed at the percentage
+    you set for them for that fiscal year.
+    Data is saved automatically on the server; <strong>Save</strong> downloads a JSON backup and <strong>Load</strong> restores one.
+  </p>
+
+</div>
+
+<!-- ===== OPTIONAL ESTIMATOR MODAL =====
+     Hidden until "Estimate % from UK bands" is clicked. It only SUGGESTS a
+     percentage; the flat-% field remains the saved source of truth. Lives
+     outside .wrap so it isn't wiped when the split panel re-renders. -->
+<div class="modal-bg" id="calcBg">
+  <div class="modal">
+    <h3 id="calcTitle">Estimate tax %</h3>
+    <div class="sub">UK marginal bands, worked in £. Your share is converted from $ using the rate below, then stacked on top of any other UK income.</div>
+
+    <div class="frow"><label>Other UK income (£ / year)</label><input class="fld mono" id="calcOther" inputmode="decimal" placeholder="0"></div>
+    <!-- Read-only on purpose: the rate lives in Settings so there is one of it.
+         A second input here could disagree with the stored one. -->
+    <div class="frow"><label>USD → GBP rate</label><span class="mono" id="calcFxLbl">—</span></div>
+    <div class="frow"><label>This year's share</label><span class="mono" id="calcShare">—</span></div>
+
+    <details class="bands">
+      <summary>Tax bands (defaults: 2025/26 England)</summary>
+      <div class="bandgrid">
+        <label>Personal allowance (£)<input class="mono" id="b_pa"></label>
+        <label>Higher rate from (£)<input class="mono" id="b_ht"></label>
+        <label>Additional from (£)<input class="mono" id="b_at"></label>
+        <label>Basic rate (%)<input class="mono" id="b_br"></label>
+        <label>Higher rate (%)<input class="mono" id="b_hr"></label>
+        <label>Additional rate (%)<input class="mono" id="b_ar"></label>
+      </div>
+    </details>
+
+    <div class="calc-result">
+      <div class="big" id="calcPct">—</div>
+      <div class="det" id="calcDet"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn" id="calcCancel">Cancel</button>
+      <button class="btn" id="calcUse" style="background:var(--profit);color:var(--on-accent);border-color:var(--profit)">Use this %</button>
+    </div>
+
+    <div class="note">Estimate only. Worked in £ at England rates and does <strong>not</strong> subtract the Mexican tax already paid (which may reduce or cancel the UK tax via Foreign Tax Credit Relief). "Use this %" just fills the flat-% field — what gets saved is still that single percentage.</div>
+  </div>
+</div>
+
+<!-- ===== SNAPSHOT RESTORE MODAL =====
+     Lists the server-side rolling snapshots (one is written automatically
+     before every change; the server keeps the 30 newest). Restoring replaces
+     the store — but the current state is snapshotted first, so a restore can
+     itself be undone by restoring the snapshot it just created. -->
+<!-- ===== Add / edit a line =====
+     One dialog for income and for expenses, for new lines and for existing
+     ones. Deleting a line starts HERE rather than on the ledger row: it is the
+     only action on a row that cannot be undone from the row itself. -->
+<div class="modal-bg" id="lineBg">
+  <div class="modal">
+    <div class="modalhead"><h3 id="lineTitle">Add income</h3></div>
+    <div class="err" id="lineErr"></div>
+    <div class="fgrid">
+      <div class="wide"><label for="liNote">Note</label>
+        <input id="liNote" placeholder="e.g. Q1 payout" maxlength="200" /></div>
+      <div id="liCatWrap"><label for="liCat">Category</label><select id="liCat" class="mono"></select></div>
+      <div><label for="liDate">Date</label><input id="liDate" type="date" class="mono" /></div>
+      <div><label for="liAmt">Amount</label>
+        <div class="amtwrap"><span class="cur" id="liSym">$</span>
+          <input id="liAmt" class="mono" type="number" inputmode="decimal" step="0.01" placeholder="0.00" /></div></div>
+      <div><label for="liCur">Paid in</label><select id="liCur" class="mono"></select></div>
+      <div class="wide" id="liFxWrap">
+        <label for="liFx">Rate <span class="opt">(units per 1 <span id="liBase">USD</span>)</span></label>
+        <input id="liFx" class="mono" type="number" inputmode="decimal" step="0.01" />
+        <div class="fhint" id="liFxHint"></div>
+      </div>
+    </div>
+    <div class="modal-actions" style="justify-content:space-between">
+      <button class="btn danger" id="liDel" style="display:none">Delete line</button>
+      <span style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn" id="liCancel">Cancel</button>
+        <button class="btn" id="liSave" style="background:var(--profit);color:var(--on-accent);border-color:var(--profit)">Save</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Add / edit a rental =====
+     One form for both: the only difference is that an existing rental can also
+     be deleted, and deleting takes its records with it. -->
+<div class="modal-bg" id="rentalBg">
+  <div class="modal">
+    <div class="modalhead">
+      <h3 id="rentalTitle">Add a rental</h3>
+      <button class="ibtn" id="rInfoBtn" aria-expanded="false" aria-controls="rInfo"
+              aria-label="What a rental is" title="What a rental is">i</button>
+    </div>
+    <div class="info" id="rInfo">
+      <p>A rental is a property you record income and expenses against. Every income and expense row
+        is filed under one, and its page shows only its own figures.</p>
+      <p>The links and note are yours — <b>nothing is ever fetched from them</b>, they are just kept
+        where you look for them. They open in a new tab when you click them.</p>
+      <p>Deleting a rental deletes the income and expenses filed under it, so it asks you to type
+        the name first. A snapshot is written before every change, which is the way back.</p>
+    </div>
+    <div class="err" id="rentalErr"></div>
+    <div class="field">
+      <label for="rName">Name</label>
+      <input id="rName" placeholder="Casa Verde" maxlength="60" />
+    </div>
+    <div class="field">
+      <label>Colour</label>
+      <div class="swatches" id="rColors"></div>
+      <div class="fhint">Used for this rental everywhere it appears beside another one.</div>
+    </div>
+    <div class="field">
+      <label for="rAirbnb">Airbnb listing</label>
+      <input id="rAirbnb" placeholder="https://www.airbnb.com/rooms/…" />
+    </div>
+    <div class="field">
+      <label for="rDash">Dashboard</label>
+      <input id="rDash" placeholder="https://…" />
+      <div class="fhint">Wherever you manage bookings for this one.</div>
+    </div>
+    <div class="field">
+      <label for="rNet">Internet</label>
+      <input id="rNet" placeholder="http://192.168.…" />
+      <div class="fhint">A local address is fine — links are stored, never opened by the app.</div>
+    </div>
+    <div class="field">
+      <label for="rNote">Note</label>
+      <textarea id="rNote" placeholder="Wi-Fi code, cleaner's number, boiler quirks…" maxlength="1000"></textarea>
+    </div>
+    <div class="modal-actions" style="justify-content:space-between">
+      <button class="btn danger" id="rDelete" style="display:none">Delete rental…</button>
+      <span style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn" id="rCancel">Cancel</button>
+        <button class="btn" id="rSave" style="background:var(--profit);color:var(--on-accent);border-color:var(--profit)">Save</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Adding or editing a person =====
+     The people the profit is divided between. Two names used to be written
+     into the source, which made them everyone else's owners too. -->
+<div class="modal-bg" id="personBg">
+  <div class="modal" style="max-width:460px">
+    <div class="modalhead">
+      <h3 id="personTitle">Add a person</h3>
+      <button class="ibtn" id="pInfoBtn" aria-expanded="false" aria-controls="pInfo"
+              aria-label="What a person is here" title="What a person is here">i</button>
+    </div>
+    <div class="info" id="pInfo">
+      <p>These are the people the <b>net profit is divided between</b> — the owners, not the app's
+        users. Nobody needs an account here, and nothing in the ledger is attributed to them.</p>
+      <p><b>Share</b> is their percentage of the profit from every rental combined. The shares do not
+        have to total 100 while you are re-dividing them; the panel says what the total is, and what
+        nobody holds.</p>
+      <p><b>Tax %</b> is for the fiscal year on screen only — a marginal rate is a fact about a year,
+        not about a person, so each year is set separately.</p>
+      <p>Removing someone removes their tax percentages for every year with them. A snapshot is
+        written before every change, which is the way back.</p>
+    </div>
+    <div class="err" id="personErr"></div>
+    <div class="fgrid">
+      <div class="wide">
+        <label for="pName">Name</label>
+        <input id="pName" placeholder="e.g. Ana Ionescu" maxlength="60" />
+      </div>
+      <div class="wide">
+        <label>Colour</label>
+        <div class="swatches" id="pColors"></div>
+        <div class="fhint">Their initials sit on this, and it is their series in the tax chart.</div>
+      </div>
+      <div>
+        <label for="pShare">Share of profit</label>
+        <div class="amtwrap"><input id="pShare" class="mono" inputmode="decimal" placeholder="0" /><span class="cur">%</span></div>
+      </div>
+      <div>
+        <label for="pRate">Tax % <span class="opt" id="pRateFY"></span></label>
+        <div class="amtwrap"><input id="pRate" class="mono" inputmode="decimal" placeholder="0" /><span class="cur">%</span></div>
+      </div>
+    </div>
+    <div class="modal-actions" style="justify-content:space-between">
+      <button class="btn danger" id="pDelete" style="display:none">Remove person…</button>
+      <span style="display:flex;gap:8px;margin-left:auto">
+        <button class="btn" id="pCancel">Cancel</button>
+        <button class="btn" id="pSave" style="background:var(--profit);color:var(--on-accent);border-color:var(--profit)">Save</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Removing a person =====
+     Takes their tax percentages with them, so the guard is typing the name —
+     the same rule as a rental. -->
+<div class="modal-bg" id="pDelBg">
+  <div class="modal">
+    <div class="modalhead"><h3 data-icon="trash" data-icon-color="--tax">Remove this person?</h3></div>
+    <div class="err show" id="pDelWhat"></div>
+    <div class="field">
+      <label for="pDelName">Type their name to confirm</label>
+      <input id="pDelName" autocomplete="off" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="pDelCancel">Cancel</button>
+      <button class="btn danger" id="pDelGo">Remove</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Deleting a rental =====
+     Takes every record filed under it, so the guard is typing the name: a
+     confirm() box gets dismissed by reflex, a name does not. -->
+<div class="modal-bg" id="rDelBg">
+  <div class="modal">
+    <div class="modalhead"><h3 data-icon="trash" data-icon-color="--tax">Delete this rental?</h3></div>
+    <div class="err show" id="rDelWhat"></div>
+    <div class="field">
+      <label for="rDelName">Type the rental's name to confirm</label>
+      <input id="rDelName" autocomplete="off" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="rDelCancel">Cancel</button>
+      <button class="btn danger" id="rDelGo">Delete it</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Currency rate =====
+     The ledger is kept in USD; UK tax is worked in GBP. One rate, stored on the
+     server so every device estimates at the same one. It is a planning input,
+     not a financial record: it converts nothing that is stored, it only feeds
+     the optional band estimator. -->
+<div class="modal-bg" id="fxBg">
+  <div class="modal">
+    <div class="modalhead">
+      <h3 data-icon="money" data-icon-color="--profit">Currencies &amp; rates</h3>
+      <button class="ibtn" id="fxInfoBtn" aria-expanded="false" aria-controls="fxInfo"
+              aria-label="What these rates are for" title="What these rates are for">i</button>
+    </div>
+    <div class="info" id="fxInfo">
+      <p><b>Rate = how many units of that currency one unit of the base is worth.</b>
+        GBP 0.79 means $1 = £0.79. The base currency is what every figure in the ledger is
+        already recorded in, so its own rate is always 1.</p>
+      <p>The ledger is recorded in the base currency and <b>stays</b> in it. Changing a rate converts
+        nothing and restates nothing you have saved — it changes what the header dropdown draws, and
+        what the tax estimator converts a year's share with before stacking it on other UK income.
+        The base currency is locked as soon as there are records stored in it: relabelling them
+        without converting them would turn $1,450 into MX$1,450 in one click.</p>
+      <p>Rates are yours: <b>Update rates online</b> fills the ones the European Central Bank
+        publishes, and is the only outbound request this app ever makes — on that button, never on
+        a timer and never on boot. Type them by hand instead and nothing leaves the machine. A
+        currency the ECB does not publish keeps whatever you typed.</p>
+    </div>
+    <div class="err" id="fxErr"></div>
+    <div id="curRows"></div>
+    <div class="addcur">
+      <label for="addCur">Add currency</label>
+      <select id="addCur" class="mono"></select>
+    </div>
+    <div class="fgrid">
+      <div class="wide">
+        <label for="setBase">Base currency</label>
+        <select id="setBase" class="mono"></select>
+        <div class="curhint" id="baseNote" style="margin-top:6px"></div>
+      </div>
+      <div>
+        <label for="defIncome">New income defaults to</label>
+        <select id="defIncome" class="mono"></select>
+      </div>
+      <div>
+        <label for="defExpense">New expense defaults to</label>
+        <select id="defExpense" class="mono"></select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="fxRefresh">↻ Update rates online</button>
+      <button class="btn" id="fxCancel">Cancel</button>
+      <button class="btn" id="fxSave" style="background:var(--profit);color:var(--on-accent);border-color:var(--profit)">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-bg" id="restoreBg">
+  <div class="modal">
+    <!-- Close sits in the title row: the list below can be 30 rows long, and the
+         way out should not be at the far end of it. -->
+    <div class="modalhead">
+      <h3 data-icon="restore" data-icon-color="--profit">Restore a snapshot</h3>
+      <button class="btn" id="restoreCancel">Close</button>
+    </div>
+    <div class="sub">The server saves a snapshot before every change and keeps the last 30. Restoring replaces the current data; the current state is snapshotted first, so you can undo a restore.</div>
+    <div id="snapList"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  STATE — a handful of module-level variables hold everything
+//  the UI needs. DATA is the server's store; FY is which fiscal
+//  year tab is selected; everything else is derived on the fly.
+// ============================================================
+let DATA = null;                 // the whole store fetched from GET /api/data
+let FY = null;                   // currently selected fiscal year, e.g. "2025-2026"
+let extraFYs = [];               // future years added via "+ Year" that have no data yet
+let charts = {};                 // live Chart.js instances, keyed by canvas id (so we can destroy before redraw)
+let VIEW = "overview";           // "overview" or a rental id — which top-level view is showing
+let DISPLAY = null;              // currency code to SHOW figures in (null = the base, i.e. as stored)
+let NOTE_OPEN = false;           // whether the open rental's note is expanded under the year row
+let LFILTER = "all";             // "all" | "income" | "expenses" — which side of the ledger is shown.
+                                 // A reading mode, never a filter on what is saved: the KPI row above
+                                 // and every chart keep showing the whole year whatever is selected.
+
+// The rentals come from the store — there is no list in this file to disagree
+// with it. Every one carries its own colour, links and note.
+const apts = () => (DATA && DATA.apartments) || [];
+const aptById = id => apts().find(a => a.id === id) || null;
+const aptName = id => (aptById(id) || {}).name || "—";
+// Likewise the people the profit is split between: a list in the store, not
+// two names in this file. Nobody's household belongs in a public template.
+const people = () => (DATA && DATA.people) || [];
+const personById = id => people().find(p => p.id === id) || null;
+// The swatches offered in both dialogs. Same list the server falls back to.
+const RENTAL_COLORS = ["#2F6F62","#B5654A","#8556B3","#56B3AA","#85B356","#3D3399","#99337A","#479933"];
+// Initials for a person's avatar: two letters, so a long name still fits a dot.
+const initialsOf = n => String(n || "").trim().split(/\s+/).map(w => w[0] || "").join("").slice(0, 2).toUpperCase();
+// Text that sits on a colour chosen from the swatches. White is unreadable on
+// the paler ones and near-black on the darker ones, so the choice is computed
+// from the swatch's own luminance rather than picked once and hoped for.
+const readableOn = hex => {
+  const lum = h => {
+    const n = parseInt(String(h).slice(1), 16);
+    const lin = v => { const x = v/255; return x <= 0.03928 ? x/12.92 : Math.pow((x+0.055)/1.055, 2.4); };
+    return 0.2126*lin((n>>16)&255) + 0.7152*lin((n>>8)&255) + 0.0722*lin(n&255);
+  };
+  const L = lum(hex);
+  const against = ink => { const a = Math.max(L, lum(ink)), b = Math.min(L, lum(ink)); return (a+0.05)/(b+0.05); };
+  // Whichever of the two actually contrasts better, rather than a luminance
+  // threshold: a mid-tone teal sits awkwardly either side of any threshold you
+  // pick, and picking wrong there is white-on-pastel.
+  return against("#FFFFFF") >= against("#16201D") ? "#FFFFFF" : "#16201D";
+};
+
+// Expense categories — one list drives BOTH the add-row and edit-row selects,
+// so they can't drift apart.
+// One list: the id is what is stored (and what the server whitelists), the rest
+// is how it is drawn. A category with no icon and no colour is a bar nobody can
+// read, so they travel together.
+const CATS = [
+  { id:"internet",    label:"Internet",     icon:"🌐", color:"#4E7CA8" },
+  { id:"hoa",         label:"HOA fees",     icon:"🏢", color:"#8556B3" },
+  { id:"fideicomiso", label:"Fideicomiso",  icon:"📜", color:"#B5654A" },
+  { id:"utilities",   label:"Utilities",    icon:"💡", color:"#C99A2E" },
+  { id:"maintenance", label:"Maintenance",  icon:"🔧", color:"#2F6F62" },
+  { id:"management",  label:"Property mgmt",icon:"🧑‍💼", color:"#A85C7C" },
+  { id:"insurance",   label:"Insurance",    icon:"🛡️", color:"#56B3AA" },
+  { id:"other",       label:"Other",        icon:"•",  color:"#6B7670" },
+];
+const CAT = Object.fromEntries(CATS.map(c => [c.id, c]));
+// Income has no category of its own, so it gets one icon and one colour, kept
+// here beside the categories it sits among in the ledger.
+const INCOME_MARK = { icon:"💵", color:"#5BA89A" };
+const catOf = id => CAT[id] || CAT.other;
+// What an empty ledger says, which depends on why it is empty.
+const EMPTY_LEDGER = {
+  all:      "Nothing recorded for this year yet.",
+  income:   "No income recorded for this year.",
+  expenses: "No expenses recorded for this year.",
+};
+// A tinted wash behind an icon: the category's own colour, most of the way to
+// transparent, so the glyph sits on something related rather than grey.
+const tint = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+};
+
+// Escape a value for use inside an HTML attribute (edit-row input values —
+// a note containing a quote would otherwise break out of value="...").
+// Card- and KPI-title icons, drawn rather than typed: an emoji is a different
+// glyph on every platform and cannot take the colour of the text beside it.
+const KICON = {
+  income:   `<path d="M12 3v14M6 11l6 6 6-6"/><path d="M4 21h16"/>`,
+  expense:  `<path d="M12 21V7M6 13l6-6 6 6"/><path d="M4 3h16"/>`,
+  profit:   `<path d="M3 17l6-6 4 4 7-7"/><path d="M14 8h6v6"/>`,
+  tax:      `<path d="M4 20h16"/><path d="M7 20V9M12 20V4M17 20v-7"/>`,
+  pie:      `<path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M14 3.3A9 9 0 0 1 20.7 10H14z"/>`,
+  flow:     `<path d="M3 16l5-6 4 4 4-6 5 5"/>`,
+  years:    `<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 3v3M16 3v3"/>`,
+  split:    `<path d="M12 3v6"/><path d="M12 9l-5 5M12 9l5 5"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/>`,
+  rate:     `<path d="M3 17l6-6 4 4 7-7"/><path d="M14 8h6v6"/>`,
+  lifetime: `<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>`,
+  gauge:    `<path d="M4 18.5a8.5 8.5 0 1 1 16 0"/><path d="M12 18.5l4.4-5.2"/><circle cx="12" cy="18.5" r="1.2"/>`,
+  compare:  `<path d="M3.5 20.5h17"/><rect x="6" y="10" width="4.5" height="8" rx="1"/><rect x="13.5" y="5" width="4.5" height="13" rx="1"/>`,
+  people:   `<circle cx="9" cy="8" r="3.2"/><path d="M3.2 19.5a5.8 5.8 0 0 1 11.6 0"/><path d="M16.2 5.6a3.2 3.2 0 0 1 0 6"/><path d="M17.6 14.2a5.8 5.8 0 0 1 3.2 5.3"/>`,
+  calc:     `<rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8.5 7h7"/><path d="M9 12h.01M12 12h.01M15 12h.01M9 16.5h.01M12 16.5h.01M15 16.5h.01"/>`,
+  home:     `<path d="M3 11l9-7 9 7"/><path d="M5.5 9.9V20h13V9.9"/><path d="M10 20v-5.2h4V20"/>`,
+  trash:    `<path d="M4 6.5h16"/><path d="M9.5 6.5V4.5h5v2"/><path d="M6.8 6.5l.9 13.5h8.6l.9-13.5"/>`,
+  money:    `<rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><circle cx="12" cy="12" r="2.8"/><path d="M6 12h.01M18 12h.01"/>`,
+  restore:  `<path d="M3.6 12a8.4 8.4 0 1 0 2.6-6.1"/><path d="M3 4.5V10h5.5"/><path d="M12 8v4.3l3 1.8"/>`,
+};
+
+// A title's icon belongs to the title, not to whatever last wrote the text.
+// Every heading that JS rewrites goes through here, so the icon survives a
+// re-render and cannot be forgotten at one of the seven call sites.
+const TITLE_ICON = {
+  rrTitle:         [KICON.gauge,   "--profit"],
+  compareTitle:    [KICON.compare, "--profit"],
+  monthlyTitle:    [KICON.flow,    "--profit"],
+  monthlyPropTitle:[KICON.flow,    "--profit"],
+  catAllTitle:     [KICON.pie,     "--expense"],
+  catTitle:        [KICON.pie,     "--expense"],
+  propYearsTitle:  [KICON.years,   "--profit"],
+  rentalTitle:     [KICON.home,    "--profit"],
+  personTitle:     [KICON.people,  "--profit"],
+  calcTitle:       [KICON.calc,    "--tax"],
+};
+// The headings JS never rewrites carry their icon as an attribute rather than
+// as inline SVG, so both kinds of title read from the same KICON list and a
+// changed glyph cannot end up half-applied.
+const paintStaticTitles = () => {
+  document.querySelectorAll("[data-icon]").forEach(el => {
+    const path = KICON[el.dataset.icon];
+    if(path) el.insertAdjacentHTML("afterbegin", kicon(path, el.dataset.iconColor) + " ");
+  });
+};
+const setTitle = (id, text, icon) => {
+  const [path, colour] = icon || TITLE_ICON[id] || [];
+  document.getElementById(id).innerHTML = (path ? kicon(path, colour) + " " : "") + esc(text);
+};
+const kicon = (path, colorVar) =>
+  `<svg class="h2ico" viewBox="0 0 24 24" fill="none" stroke="${colorVar ? `var(${colorVar})` : "currentColor"}"
+     stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+
+// A day heading: "Mon 4 May 2026" — the way a statement reads.
+const dayLabel = iso => new Date(iso + "T00:00:00").toLocaleDateString("en-GB",
+  {weekday:"short", day:"numeric", month:"short", year:"numeric"});
+
+const esc = s => String(s ?? "").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+
+// Small inline SVG icons (stroke:currentColor so they inherit whatever text
+// colour surrounds them, including the "on" tab state). Used instead of
+// emoji, which render as tofu boxes on systems without a colour-emoji font.
+const ICON_CHART = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px" aria-hidden="true"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>`;
+
+// Client-side mirror of the server's strict amount rule: blank or non-numeric
+// (e.g. "1,200") is rejected up front instead of being saved as $0.
+const badAmount = v => String(v).trim() === "" || !Number.isFinite(Number(v));
+
+// c() reads a CSS custom property value at runtime. Used so the charts and inline
+// styles draw with the exact same palette defined once in :root above.
+const COL = getComputedStyle(document.documentElement);
+const c = name => COL.getPropertyValue(name).trim();
+
+// ---- Money + percent formatting ----
+// DISPLAY is a VIEW setting and nothing else: every figure is stored in the base
+// currency and stays there. Switching this converts what is drawn, never what is
+// saved — and the strip under the header says so while it is not the base.
+// money0 = whole units (used in cards/charts for a clean look);
+// money2 = cents shown (used in the line-item ledgers for precision).
+// The ONE place that decides what currency a figure is shown in. Every view
+// formats money through money0/money2, so there is nowhere else for a stray "$"
+// to come from — see the self check.
+const dispCode = () => DISPLAY || baseCur();
+const dispRate = () => {
+  const c = currencies().find(x => x.code === dispCode());
+  return (c && Number(c.rate)) || 1;                      // base is 1 by definition
+};
+const dispSymbol = () => {
+  const c = currencies().find(x => x.code === dispCode());
+  return (c && c.symbol) || curSymbol(dispCode());
+};
+const fmtMoney = (n, opts) => {
+  const v = (n || 0) * dispRate();                        // base → display
+  try {
+    return new Intl.NumberFormat("en-US", {style:"currency", currency:dispCode(), ...opts}).format(v);
+  } catch(_) {                                            // a code Intl does not know
+    return dispSymbol() + v.toLocaleString("en-US", {minimumFractionDigits:opts.minimumFractionDigits || 0,
+                                                     maximumFractionDigits:opts.maximumFractionDigits});
+  }
+};
+// AS PAID WINS: a line paid MX$4,700 shows exactly that in the MXN view, rather
+// than being converted to dollars and back at today's rate into MX$4,698.
+const inCur = (n, code) => {
+  try { return new Intl.NumberFormat("en-US", {style:"currency", currency:code,
+        minimumFractionDigits:2, maximumFractionDigits:2}).format(n || 0); }
+  catch(_){ const c = currencies().find(x => x.code === code);
+            return ((c && c.symbol) || code) + (n || 0).toLocaleString("en-US", {minimumFractionDigits:2, maximumFractionDigits:2}); }
+};
+const lineAmount = r => r.currency === dispCode() ? inCur(r.amount, r.currency) : money2(r.amountBase);
+const money0 = n => fmtMoney(Math.round((n||0)), {maximumFractionDigits:0});
+const money2 = n => fmtMoney(n, {minimumFractionDigits:2, maximumFractionDigits:2});
+const pct    = n => (Number(n)||0).toFixed(1)+"%";
+
+// ============================================================
+//  FISCAL-YEAR HELPERS
+//  The fiscal year runs April→March. A payment's calendar month
+//  decides which FY it belongs to. We store the FY as the string
+//  "STARTYEAR-ENDYEAR" (e.g. April 2025..March 2026 -> "2025-2026").
+// ============================================================
+// Given a "YYYY-MM" month, return its fiscal-year string.
+function monthToFY(month){
+  const [y,m] = month.split("-").map(Number);
+  const start = (m >= 4) ? y : y - 1;   // Jan–Mar belong to the PREVIOUS year's FY
+  return start + "-" + (start + 1);
+}
+const fyStart = fy => Number(fy.split("-")[0]);                 // "2025-2026" -> 2025
+const fyLabel = fy => fyStart(fy) + "/" + String((fyStart(fy)+1)%100).padStart(2,"0"); // -> "2025/26"
+const thisMonth = () => new Date().toISOString().slice(0,7);    // "YYYY-MM" for today
+
+// The default date for a new line: today when today belongs to the selected
+// fiscal year, otherwise the first day of that year.
+function defaultDateFor(fy){
+  const today = new Date().toISOString().slice(0,10);
+  return monthToFY(thisMonth()) === fy ? today : fyStart(fy) + "-04-01";
+}
+
+// ============================================================
+//  DATA LOADING — fetch the store, then (re)render.
+//  Called on first load and after every change so the screen
+//  always reflects what's actually saved on the server.
+// ============================================================
+async function load(){
+  DATA = await (await fetch("/api/data")).json();
+  const list = allFYs();
+  // Keep the current selection if still valid; otherwise pick the current FY
+  // if it exists, else the most recent year with data.
+  if(!FY || !list.includes(FY)){
+    FY = list.includes(monthToFY(thisMonth())) ? monthToFY(thisMonth()) : list[list.length-1];
+  }
+  render();
+}
+
+// Every fiscal year that should appear as a tab: any year that has income or
+// expenses, plus the current FY, plus any empty future years the user added.
+function allFYs(){
+  const set = new Set(extraFYs);
+  DATA.income.forEach(r => set.add(monthToFY(r.month)));
+  DATA.expenses.forEach(r => set.add(monthToFY(r.month)));
+  set.add(monthToFY(thisMonth()));
+  return [...set].sort();   // ascending; string sort works because of the YYYY format
+}
+
+// ============================================================
+//  CALCULATIONS — pure functions that turn raw rows into the
+//  numbers shown on screen. No DOM here; easy to reason about.
+// ============================================================
+// All income/expense rows for one apartment in one fiscal year.
+const rowsFor = (fy,apt) => ({
+  inc: DATA.income.filter(r => r.apartment===apt && monthToFY(r.month)===fy),
+  exp: DATA.expenses.filter(r => r.apartment===apt && monthToFY(r.month)===fy),
+});
+
+// Totals for a single apartment in a fiscal year.
+function propSummary(fy,apt){
+  const {inc,exp} = rowsFor(fy,apt);
+  // amountBase, never amount: `amount` is what was paid, in whatever currency
+  // it was paid in. Summing those would add pesos to dollars.
+  const income   = inc.reduce((s,r)=>s+r.amountBase,0);
+  const expenses = exp.reduce((s,r)=>s+r.amountBase,0);
+  return {income, expenses, profit: income-expenses, inc, exp};
+}
+
+// Combined summary across EVERY rental for a fiscal year, plus the 50/50 tax split.
+// This is the core of the app's logic:
+//   profit = income − expenses
+//   each owner's share = profit ÷ 2
+//   each owner's tax    = share × their own % for this year
+function fySummary(fy){
+  // Every rental, whatever there are — the combined view and the per-rental
+  // views are then arithmetic on the same function rather than two lists that
+  // can disagree about which properties exist.
+  const each     = apts().map(a => propSummary(fy, a.id));
+  const income   = each.reduce((s,p) => s + p.income, 0);
+  const expenses = each.reduce((s,p) => s + p.expenses, 0);
+  const profit   = income - expenses;
+  const sp       = splitOf(fy, profit);
+  return {
+    income, expenses, profit,
+    rates: sp.rates, per: sp.per, totalTax: sp.totalTax,
+    takeHome: profit - sp.totalTax,                 // combined kept after tax
+    spent:    income>0 ? expenses/income*100 : 0,   // % of income eaten by expenses
+  };
+}
+
+// The one place profit becomes per-person figures. Everything that shows a
+// share, a tax or a take-home reads this, so the combined view and a rental's
+// own page cannot divide the same profit two different ways.
+//
+// A share is a stored percentage, not a division by the number of people: two
+// owners are often not equal owners, and the app must be able to say so. The
+// shares are NOT forced to total 100 — a save half-way through re-dividing
+// them between three people would be refused at exactly the wrong moment — so
+// the card reports the total instead, and `unassigned` is what nobody holds.
+function splitOf(fy, profit){
+  const rates = DATA.taxRates[fy] || {};
+  const per = people().map(p => {
+    const share = profit * (p.share/100);
+    const rate  = Number(rates[p.id]) || 0;
+    const tax   = share * (rate/100);
+    return {...p, rate, amount: share, tax, net: share - tax};
+  });
+  const held = people().reduce((t,p) => t + p.share, 0);
+  return {
+    rates, per,
+    totalTax:   per.reduce((t,x) => t + x.tax, 0),
+    sharesHeld: Math.round(held*10)/10,
+    unassigned: profit * ((100 - held)/100),
+  };
+}
+
+// A summary object for every fiscal year (used by the all-years charts).
+const allYearsSummaries = () => allFYs().map(fy => ({fy, ...fySummary(fy)}));
+
+// Same shape as fySummary(), but scoped to ONE rental: its own income,
+// expenses and profit, with tax estimated on THAT rental's profit alone — the
+// same shares and the same per-person rates, applied to this rental's profit
+// instead of the combined one. Used for the KPI row on a single rental's page.
+function propFySummary(fy, apt){
+  const p  = propSummary(fy, apt);
+  const sp = splitOf(fy, p.profit);
+  return {
+    income: p.income, expenses: p.expenses, profit: p.profit,
+    rates: sp.rates, per: sp.per, totalTax: sp.totalTax,
+    takeHome: p.profit - sp.totalTax,
+    spent: p.income>0 ? p.expenses/p.income*100 : 0,
+  };
+}
+
+// Lifetime totals = sum of every year's figures (the teal strip at the bottom).
+function lifetime(){
+  const t = {income:0, expenses:0, profit:0, totalTax:0, takeHome:0};
+  allYearsSummaries().forEach(y => {
+    t.income+=y.income; t.expenses+=y.expenses; t.profit+=y.profit;
+    t.totalTax+=y.totalTax; t.takeHome+=y.takeHome;
+  });
+  return t;
+}
+
+// ============================================================
+//  RENDER — top-level redraw. Each sub-function owns one region
+//  of the page and just rewrites that container's innerHTML.
+// ============================================================
+function render(){
+  // A rental can be deleted while you are standing on its page.
+  if(VIEW !== "overview" && !aptById(VIEW)) VIEW = "overview";
+
+  // Nothing to show until there is somewhere to file it. An app with no data
+  // and eight blank charts looks broken rather than new.
+  renderDispCur();   // currencies exist whether or not a rental does
+  const empty = apts().length === 0;
+  document.getElementById("firstRun").style.display = empty ? "" : "none";
+  document.getElementById("viewNav").style.display = empty ? "none" : "";
+  document.getElementById("yearRow").style.display = empty ? "none" : "";
+  if(empty){
+    document.getElementById("overviewView").style.display = "none";
+    document.getElementById("propertyView").style.display = "none";
+    document.getElementById("rentalNote").style.display = "none";
+    return;
+  }
+
+  renderViewNav();
+  renderTabs();
+  renderRentalTools();
+
+  const isOverview = VIEW === "overview";
+  document.getElementById("overviewView").style.display = isOverview ? "" : "none";
+  document.getElementById("propertyView").style.display  = isOverview ? "none" : "";
+
+  // Previous fiscal year, for the KPI deltas. Passed as null when that year
+  // has no activity at all, which hides the delta lines entirely.
+  const prevFY = (fyStart(FY)-1) + "-" + fyStart(FY);
+  const withActivity = s => (s.income || s.expenses) ? s : null;
+
+  if(isOverview){
+    renderKPIs("kpis", fySummary(FY), withActivity(fySummary(prevFY)));
+    renderSplit("split", "");
+    // The ratio in the heading is drawn from the shares, so it cannot claim
+    // 50 / 50 while the panel below it says something else.
+    document.getElementById("splitRatio").textContent =
+      people().length ? "· " + people().map(p => p.share).join(" / ") : "";
+    renderRunRate();
+    renderCompare();
+    renderMonthlyChart();
+    renderCatChart(null, "catBarsAll", "catCapAll");   // every rental combined
+    renderYearsChart();
+    renderTaxChart("chartTax");
+    renderLifetime();
+    setTitle("compareTitle", `${fyLabel(FY)} — ${apts().map(a=>a.name).join(" vs ")}`);
+    setTitle("monthlyTitle", `${fyLabel(FY)} — monthly cash flow`);
+    setTitle("catAllTitle", `${fyLabel(FY)} — expenses by category (all rentals)`);
+  } else {
+    const apt = VIEW;
+    renderKPIs("kpisProp", propFySummary(FY, apt), withActivity(propFySummary(prevFY, apt)));  // this property's own numbers
+    renderPropertyCard(apt);
+    renderMonthlyChart(apt, "chartMonthlyProp", "monthlyCapProp");  // this flat only
+    renderCatChart(apt);
+    renderPropYearsChart(apt);
+    const name = aptName(apt);
+    setTitle("monthlyPropTitle", `${fyLabel(FY)} — monthly cash flow`);
+    setTitle("catTitle", `${fyLabel(FY)} — expenses by category`);
+    setTitle("propYearsTitle", `Across all years — ${name}`);
+  }
+}
+
+// Display-currency picker. Rebuilt on every render so a currency added in
+// Settings appears here without a reload, and a removed one cannot linger as a
+// selection pointing at a rate that no longer exists.
+function renderDispCur(){
+  const el = document.getElementById("dispCur");
+  const codes = currencies().map(c => c.code);
+  if(DISPLAY && !codes.includes(DISPLAY)) DISPLAY = null;   // it was deleted while selected
+  el.innerHTML = currencies().map(c => `<option value="${esc(c.code)}">${esc(c.code)}</option>`).join("");
+  el.value = dispCode();
+
+  // Say so, plainly, whenever the figures on screen are not the ones on disk.
+  const conv = dispCode() !== baseCur();
+  const bar = document.getElementById("convBar");
+  bar.classList.toggle("show", conv);
+  if(conv) bar.innerHTML = `Showing ${esc(dispCode())} at the stored rate of `
+    + `${dispRate()} per 1 ${esc(baseCur())}. Every figure is <b>recorded</b> in ${esc(baseCur())} and unchanged — `
+    + `this converts what you see, not what is saved. Switch back to ${esc(baseCur())} for the figures as entered.`;
+}
+
+// Overview, then one tab per rental in its own colour. The open tab is what
+// names the rental — its page does not repeat it as a heading.
+function renderViewNav(){
+  const tabs = apts().map(a =>
+    `<button class="vtab${VIEW === a.id ? " on" : ""}" data-view="${a.id}">
+       <span class="rdot" style="background:${esc(a.color)}"></span>${esc(a.name)}</button>`).join("");
+  document.getElementById("viewNav").innerHTML =
+    `<button class="vtab${VIEW === "overview" ? " on" : ""}" data-view="overview">${ICON_CHART} Overview</button>${tabs}`;
+}
+
+// The open rental's note, links and Edit, at the far end of the year row —
+// space that is otherwise empty. Nothing here on the Overview.
+function renderRentalTools(){
+  const a = VIEW === "overview" ? null : aptById(VIEW);
+  const tools = document.getElementById("rentalTools");
+  const noteEl = document.getElementById("rentalNote");
+  if(!a){ tools.innerHTML = ""; noteEl.style.display = "none"; return; }
+
+  const I = {
+    airbnb: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21c3.3 0 5.5-2 5.5-4.6 0-2.5-3-6.6-5.5-10.4C9.5 9.8 6.5 13.9 6.5 16.4 6.5 19 8.7 21 12 21z"/></svg>`,
+    dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 20V9"/></svg>`,
+    internet: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 9a15 15 0 0 1 19 0M5.5 12.5a10 10 0 0 1 13 0M8.5 16a5.5 5.5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor"/></svg>`,
+  };
+  const LABEL = {airbnb:"Airbnb listing", dashboard:"Dashboard", internet:"Internet"};
+  const links = ["airbnb","dashboard","internet"].filter(k => a.links[k]).map(k =>
+    `<a href="${esc(a.links[k])}" target="_blank" rel="noopener noreferrer" title="${LABEL[k]} — ${esc(a.name)}" aria-label="${LABEL[k]} for ${esc(a.name)}">${I[k]}</a>`).join("");
+
+  // The note button carries the whole note as its tooltip and opens it on click,
+  // so a Wi-Fi code can be read rather than squinted at.
+  const noteBtn = a.note
+    ? `<button class="notebtn" data-act="note" aria-expanded="${NOTE_OPEN}" aria-controls="rentalNote" title="${esc(a.note)}">✎ Note</button>` : "";
+  tools.innerHTML = noteBtn + links + (links ? `<span class="rsep"></span>` : "")
+    + `<button class="btn ebtn" data-act="edit-rental">✎ Edit</button>`;
+
+  const show = !!a.note && NOTE_OPEN;
+  noteEl.style.display = show ? "" : "none";
+  if(show) noteEl.innerHTML = `<b>Note</b> · ${esc(a.note)}`;
+}
+
+// Switch the top-level view. Any in-progress inline edit belongs to the old view.
+function selectView(v){ VIEW = v; NOTE_OPEN = false; render(); }
+
+// Fiscal-year pill tabs + the "+ Year" button. Buttons carry data-* attributes;
+// a single delegated click handler (see bottom) reads them — no inline onclick.
+function renderTabs(){
+  const list = allFYs();
+  document.getElementById("tabs").innerHTML =
+    list.map(fy => `<button class="tab ${fy===FY?"on":""}" data-fy="${fy}">${fyLabel(fy)}</button>`).join("")
+    + `<button class="tab add" data-act="add-year">+ Year</button>`
+;
+}
+
+// The four KPI cards at the top of a view for the selected FY. `summary` is
+// either fySummary(FY) (combined, Overview) or propFySummary(FY, apt) (one
+// property's own numbers, on its page) — same rendering either way.
+// `prev` is the same-shaped summary for the PREVIOUS fiscal year (or null when
+// that year has no activity): each card then shows a ↑/↓ delta against it,
+// coloured by whether the move is good (income/profit up, expenses/tax down).
+function renderKPIs(targetId, summary, prev){
+  const s = summary;
+  const delta = (cur, before, goodWhenUp) => {
+    if(!prev) return "";
+    const d = cur - before;
+    if(Math.abs(d) < 0.005) return `<div class="kdelta" style="color:${c("--muted")}">= same as last yr</div>`;
+    const up = d > 0;
+    const col = (up === goodWhenUp) ? c("--profit") : c("--tax");
+    return `<div class="kdelta" style="color:${col}">${up?"↑":"↓"} ${money0(Math.abs(d))} vs last yr</div>`;
+  };
+  // [label, colour var, summary key, big?, is-up-good?]
+  const items = [
+    ["Income","--income","income",false,true,"income"],
+    ["Expenses","--expense","expenses",false,false,"expense"],
+    ["Net profit","--profit","profit",true,true,"profit"],
+    ["Total tax","--tax","totalTax",false,false,"tax"],
+  ];
+  document.getElementById(targetId).innerHTML = items.map(([l,col,key,big,goodUp,ic])=>`
+    <div class="kpi">
+      <div class="l" style="color:${c(col)}">${kicon(KICON[ic], col)}${l}</div>
+      <div class="v ${big?"big":""}" style="${big?`color:${c("--profit")}`:""}">${money0(s[key])}</div>
+      ${delta(s[key], prev ? prev[key] : 0, goodUp)}
+    </div>`).join("");
+}
+
+// One ledger: income and expenses in date order, the way the account they came
+// from reads. They were two cards for a while; two cards meant looking in two
+// places to see what a month did, and left a tall list beside a short one.
+// What tells them apart is the sign, the colour and the icon — not the column.
+function renderPropertyCard(aptId){
+  const a = aptById(aptId);
+  const host = document.getElementById("properties");
+  if(!a){ host.innerHTML = ""; return; }
+  const p = propSummary(FY, aptId);
+
+  // One array, tagged by kind, newest day first — exactly what a statement is.
+  const rows = [
+    ...p.inc.map(r => ({ r, kind: "income" })),
+    ...p.exp.map(r => ({ r, kind: "expenses" })),
+  ].filter(x => LFILTER === "all" || LFILTER === x.kind)
+   .sort((x, y) => y.r.date.localeCompare(x.r.date));
+
+  const line = ({ r, kind }) => {
+    const cat = kind === "expenses" ? catOf(r.category) : null;
+    const mark = cat || INCOME_MARK;
+    const title = esc(r.note) || (cat ? cat.label : "Rent");
+    const meta = [r.note && cat ? cat.label : "", r.currency !== baseCur() ? `paid in ${r.currency}` : ""]
+      .filter(Boolean).map(x => `<span>${esc(x)}</span>`).join("");
+    // The sign is part of reading the list, not decoration: in a mixed ledger
+    // "160" and "-160" are different facts.
+    const sign = kind === "expenses" ? "\u2212" : "+";
+    return `
+      <div class="lrow" data-act="edit" data-kind="${kind}" data-id="${r.id}" role="button" tabindex="0"
+           title="Edit this line">
+        <i class="catico" style="background:${tint(mark.color, .16)}">${mark.icon}</i>
+        <div class="body"><div class="n">${title}</div><div class="meta">${meta}</div></div>
+        <div class="amts"><span class="amt ${kind === "expenses" ? "out" : "in"}">${sign}${lineAmount(r)}</span>${
+          r.currency !== dispCode() && r.currency !== baseCur()
+            ? `<span class="orig">${inCur(r.amount, r.currency)}</span>` : ""}</div>
+        <span class="pencil" aria-hidden="true">\u270E</span>
+      </div>`;
+  };
+
+  const days = [...new Set(rows.map(x => x.r.date))];
+  const list = rows.length
+    ? days.map(d => `<div class="dayhead">${dayLabel(d)}</div>`
+        + rows.filter(x => x.r.date === d).map(line).join("")).join("")
+    : `<div class="empty">${EMPTY_LEDGER[LFILTER]}</div>`;
+
+  // The chips read the list; the two buttons write to it. The kind is settled
+  // by which button is pressed, so the window never has to ask.
+  const chip = (id, label) =>
+    `<button class="chip${LFILTER === id ? " on" : ""}" data-act="filter" data-filter="${id}"
+             aria-pressed="${LFILTER === id}">${label}</button>`;
+
+  host.innerHTML = `
+    <section class="card">
+      <div class="cardhead">
+        <h2>${kicon(KICON.flow, "--profit")} Ledger</h2>
+        ${chip("all", "All")}${chip("income", "Income")}${chip("expenses", "Expenses")}
+        <span class="grow"></span>
+        <button class="kbtn in"  data-act="new" data-kind="income">+ Income</button>
+        <button class="kbtn out" data-act="new" data-kind="expenses">+ Expense</button>
+      </div>
+      <div class="ledger">${list}</div>
+    </section>`;
+}
+
+// Each person's share, tax % and take-home. The list comes from the store, so
+// adding a third owner is data rather than an edit here.
+//
+// Shown on the Overview and on each rental's page with the same combined
+// numbers — the split is by person, not by rental — so idPrefix keeps the two
+// copies' input ids apart.
+function renderSplit(targetId, idPrefix){
+  const s = fySummary(FY);
+  const sp = splitOf(FY, s.profit);
+  const host = document.getElementById(targetId);
+
+  if(!sp.per.length){
+    // Nothing to split between yet. The way in is "+ Person" in the heading
+    // above — the same control as when there are already people, so there is
+    // one place to add someone rather than two that have to agree.
+    host.innerHTML = `<div class="empty" style="font-style:normal">
+      Nobody to split the profit between yet — add the first with <b>+ Person</b> above.</div>`;
+    return;
+  }
+
+  host.innerHTML = sp.per.map(p => `
+    <div class="person">
+      <div class="top">
+        <span class="pnamerow">
+          <i class="pav" style="background:${esc(p.color)};color:${readableOn(p.color)}">${initialsOf(p.name)}</i>
+          <span class="pname">${esc(p.name)}
+            <span class="muted" style="font-weight:400;font-size:12px">· ${p.share}% owner</span></span>
+        </span>
+        <span class="rateedit">
+          <div class="ratebox">
+            <input class="mono" inputmode="decimal" id="rate_${idPrefix}${p.id}" data-rate="${p.id}"
+                   value="${p.rate||""}" placeholder="0" aria-label="Tax % for ${esc(p.name)}"><span class="pc">%</span>
+          </div>
+          <button class="btn ebtn" data-act="edit-person" data-person="${p.id}"
+                  title="Edit ${esc(p.name)}" aria-label="Edit ${esc(p.name)}">✎</button>
+        </span>
+      </div>
+      <div style="text-align:right;margin-bottom:8px">
+        <!-- Optional: open the marginal-band estimator for this person -->
+        <button class="estbtn" data-est data-person="${p.id}">⚙ Estimate % from UK bands</button>
+      </div>
+      <div class="minis">
+        <div class="mini"><div class="ml">Share</div><div class="mv">${money0(p.amount)}</div></div>
+        <div class="mini"><div class="ml">Tax</div><div class="mv" style="color:${c("--tax")}">${money0(p.tax)}</div></div>
+        <div class="mini"><div class="ml">Take-home</div><div class="mv" style="color:${c("--profit")}">${money0(p.net)}</div></div>
+      </div>
+    </div>`).join("")
+    // The shares are allowed not to total 100; saying so beats refusing a save
+    // part-way through re-dividing them. What nobody holds is named in money,
+    // because "80%" is easy to read past and "$1,398 unassigned" is not.
+    // Under 100 leaves money nobody holds, which is worth naming in money —
+    // "80%" is easy to read past, "$1,398 unassigned" is not. OVER 100 is a
+    // different fault: the shares claim more profit than exists, so it is
+    // reported as an overshoot rather than as a negative amount unassigned.
+    + `<div class="peoplefoot">
+         <span>${sp.per.length} ${sp.per.length === 1 ? "owner" : "owners"}</span>
+         <span${sp.sharesHeld === 100 ? "" : ` style="color:${c("--tax")}"`}>shares total ${sp.sharesHeld}%${
+           sp.sharesHeld === 100 ? ""
+             : sp.sharesHeld < 100 ? ` · ${money0(sp.unassigned)} unassigned`
+             : ` · over by ${Math.round((sp.sharesHeld - 100) * 10) / 10}%`}</span>
+       </div>`;
+}
+
+// ---- CHARTS (Chart.js) ----
+// Global hover/tooltip defaults, set once for every chart:
+//  · interaction "index" + intersect:false — hovering ANYWHERE in a bar's
+//    column (or a category's row) shows the tooltip for all series there, so
+//    a $23 expense is as easy to inspect as a $1,600 one. No more needing to
+//    land the cursor on a 2px sliver.
+//  · minBarLength — tiny values still draw a visible nub instead of nothing.
+Chart.defaults.interaction.mode = "index";
+Chart.defaults.interaction.intersect = false;
+Chart.defaults.datasets.bar.minBarLength = 3;
+
+// Shared tooltip label: exact amount with cents (matching the ledger rows),
+// prefixed with the series name when the chart has one.
+const tipLabel = ctx => (ctx.dataset.label ? ctx.dataset.label + ": " : "") + money2(ctx.raw);
+// Chart data stays in the base currency — only the labels convert, so the bars
+// keep their proportions and the axis still says what you are looking at.
+const axisMoney = v => {
+  const x = (v || 0) * dispRate();
+  return dispSymbol() + (Math.abs(x)/1000 >= 1 ? Math.round(x/100)/10 + "k" : Math.round(x));
+};
+
+// mk() (re)creates a chart on a canvas, destroying any previous instance first
+// so repeated renders don't stack ghosts or leak memory.
+function mk(id,cfg){ if(charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), cfg); }
+const TICK = () => c("--muted");
+const GRID = () => c("--hair");
+// Shared axis styling: hidden vertical grid, dollar-formatted Y ticks ("$1.2k").
+const moneyAxes = () => ({
+  x:{grid:{display:false}, ticks:{color:TICK(), font:{size:12}}},
+  y:{grid:{color:GRID()}, ticks:{color:TICK(), font:{size:11}, callback:axisMoney}},
+});
+
+// Expense breakdown by category for the selected year. aptId scopes it to one
+// property (rental pages); null means every rental combined (Overview).
+// Columns like every other chart (biggest first), so the hover-anywhere-in-
+// the-column tooltip behaviour works here too — the old sideways-bar layout
+// broke index-mode hover, which scans along the x axis.
+// Expenses by category, as bars you can read a name off. A chart needed a
+// legend and a hover to answer "what is the biggest one"; this says it.
+function renderCatChart(aptId, barsId="catBars", capId="catCap"){
+  const totals = {};
+  DATA.expenses
+    .filter(r => (!aptId || r.apartment === aptId) && monthToFY(r.month) === FY)
+    .forEach(r => { const k = catOf(r.category).id; totals[k] = (totals[k]||0) + r.amountBase; });
+  const rows = Object.entries(totals).sort((a,b) => b[1]-a[1]);   // biggest first
+  const total = rows.reduce((sum,r) => sum + r[1], 0);
+  const denom = total || 1;
+
+  document.getElementById(barsId).innerHTML = rows.map(([id, val]) => {
+    const cat = catOf(id);
+    return `<div class="brow">
+        <i class="catico" style="background:${tint(cat.color,.16)}">${cat.icon}</i>
+        <span class="bl">${cat.label}</span>
+        <span class="ba">${money0(val)}<span class="pc">${(val/denom*100).toFixed(0)}%</span></span>
+        <span class="bar"><i style="width:${(val/denom*100).toFixed(2)}%;background:${cat.color}"></i></span>
+      </div>`;
+  }).join("") || `<div class="empty">No expenses recorded for this year.</div>`;
+
+  document.getElementById(capId).textContent = rows.length
+    ? `${money0(total)} across ${rows.length} categor${rows.length===1?"y":"ies"} · largest: ${catOf(rows[0][0]).label} (${pct(rows[0][1]/denom*100)})`
+    : "";
+}
+
+// ---- Overview: one rental against another for the selected year ----
+// Small stats table (income / expenses / profit per rental, best profit bolded)
+// plus a grouped bar chart of the same three numbers.
+function renderCompare(){
+  const list = apts();
+  const stats = list.map(a => ({apt:a, p:propSummary(FY, a.id)}));
+  // With one rental there is nothing to compare it WITH, but the card still has
+  // something to say: that rental's income, expenses and profit for the year.
+  // Only the winner-bolding goes, because a single figure cannot win.
+  const comparing = list.length > 1;
+  const row = (label, key, col, boldWinner) => {
+    const vals = stats.map(s => s.p[key]);
+    const mark = boldWinner && comparing;
+    const best = mark ? Math.max(...vals) : null;
+    const tied = mark && vals.filter(v => v === best).length > 1;
+    return `<span class="cl">${label}</span>` + stats.map((s,i) =>
+      `<span class="cv ${mark && !tied && vals[i] === best ? "win" : ""}" style="color:${c(col)}">${money0(vals[i])}</span>`
+    ).join("");
+  };
+  // One column per rental, sized from the list rather than typed as two.
+  document.getElementById("compareStats").innerHTML = `
+    <div class="cmp" style="grid-template-columns:1fr repeat(${list.length}, minmax(64px, auto))">
+      <span></span>${stats.map(s => `<span class="ch" style="text-align:right">${esc(s.apt.name)}</span>`).join("")}
+      ${row("Income",   "income",   "--income",  false)}
+      ${row("Expenses", "expenses", "--expense", false)}
+      ${row("Profit",   "profit",   "--profit",  true)}
+    </div>`;
+  mk("chartCompare",{
+    type:"bar",
+    data:{labels:["Income","Expenses","Profit"], datasets: stats.map(s => ({
+      label: s.apt.name,
+      data: [s.p.income, s.p.expenses, s.p.profit],
+      backgroundColor: s.apt.color,          // the rental's own colour, from the store
+      borderRadius:4, maxBarThickness:38,
+    }))},
+    options:{plugins:{legend:{labels:{color:TICK(),font:{size:12}}},tooltip:{callbacks:{label:tipLabel}}}, scales:moneyAxes()},
+  });
+}
+
+// ---- Overview: run-rate projection for the CURRENT fiscal year ----
+// Extrapolates year-end profit from the monthly pace so far, and applies this
+// year's tax rates to that projection — an early read on the likely tax bill.
+// Hidden for past/future years, where a "projection" is meaningless.
+function renderRunRate(){
+  const card = document.getElementById("runrateCard");
+  const isCurrent = monthToFY(thisMonth()) === FY;
+  card.style.display = isCurrent ? "" : "none";
+  if(!isCurrent) return;
+
+  const s = fySummary(FY);
+  // Months elapsed in the FY so far, April = 1 … March = 12.
+  const m = +thisMonth().slice(5);
+  const elapsed = m >= 4 ? m - 3 : m + 9;
+  const pace      = s.profit / elapsed;
+  const projected = pace * 12;
+  // Each person's own share of the projected profit, at their own rate.
+  const projTax   = people().reduce((t,p) =>
+    t + projected * (p.share/100) * ((Number(s.rates[p.id])||0)/100), 0);
+
+  setTitle("rrTitle", `${fyLabel(FY)} — run-rate projection`);
+  document.getElementById("runrate").innerHTML = `
+    <div class="rr">
+      <div class="cell"><div class="rl">Profit so far</div><div class="rv" style="color:${c(s.profit>=0?"--profit":"--tax")}">${money0(s.profit)}</div></div>
+      <div class="cell"><div class="rl">Pace</div><div class="rv">${money0(pace)}/mo</div></div>
+      <div class="cell"><div class="rl">Projected year end</div><div class="rv" style="color:${c(projected>=0?"--profit":"--tax")}">≈ ${money0(projected)}</div></div>
+      <div class="cell"><div class="rl">Projected tax</div><div class="rv" style="color:${c("--tax")}">≈ ${money0(projTax)}</div></div>
+    </div>`;
+
+  const prevFY = (fyStart(FY)-1) + "-" + fyStart(FY);
+  const prev = fySummary(prevFY);
+  let vsLast = "";
+  if(prev.income || prev.expenses){
+    // Percentage comparison is only meaningful when last year's profit wasn't
+    // trivial — against a near-zero base it produces absurd numbers (1394%).
+    const pct = prev.profit ? Math.round((projected-prev.profit)/Math.abs(prev.profit)*100) : 0;
+    const cmp = (prev.profit && Math.abs(pct) <= 500)
+      ? ` (tracking ${Math.abs(pct)}% ${projected>=prev.profit?"ahead":"behind"})` : "";
+    vsLast = ` · last year ended at ${money0(prev.profit)}${cmp}`;
+  }
+  document.getElementById("rrCap").textContent =
+    `${elapsed} of 12 months elapsed — assumes the rest of the year matches the pace so far${vsLast}.`;
+  // Nobody has a rate set for this year, so the projected tax is zero for a
+  // reason worth saying out loud rather than looking like a finding.
+  if(!people().some(p => Number(s.rates[p.id]) > 0)){
+    document.getElementById("rrCap").textContent += people().length
+      ? " Set tax rates in Profit split to project the tax bill."
+      : " Add the people the profit is split between to project the tax bill.";
+  }
+}
+
+// ---- Overview: monthly cash flow across the selected fiscal year ----
+// Income vs expenses summed per calendar month (every rental), Apr → Mar.
+// The only monthly-granularity view in the app — shows seasonality and
+// when big expenses landed.
+function fyMonths(fy){
+  const y = fyStart(fy);
+  return Array.from({length:12}, (_,i) => {
+    const m = ((3+i) % 12) + 1;                       // 4,5,...,12,1,2,3
+    const yr = m >= 4 ? y : y+1;
+    return `${yr}-${String(m).padStart(2,"0")}`;
+  });
+}
+function renderMonthlyChart(aptId=null, canvasId="chartMonthly", capId="monthlyCap"){
+  const months = fyMonths(FY);
+  const sumBy = rows => months.map(m =>
+    rows.filter(r => r.month===m && (!aptId || r.apartment===aptId)).reduce((s,r)=>s+r.amountBase,0));
+  const inc = sumBy(DATA.income), exp = sumBy(DATA.expenses);
+  // Cumulative profit: running total of (income − expenses) month by month.
+  // Its zero-crossing shows when the year turned profitable — the one thing
+  // the per-month bars can't express.
+  let run = 0;
+  const cum = months.map((_,i) => run += inc[i] - exp[i]);
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  mk(canvasId,{
+    type:"bar",
+    data:{labels:months.map(m=>MON[+m.slice(5)-1]+" "+m.slice(2,4)),datasets:[
+      {type:"line", label:"Running profit", data:cum, borderColor:c("--profit"), borderWidth:2,
+       borderDash:[6,4], pointRadius:2.5, pointBackgroundColor:c("--profit"), tension:.2},
+      {label:"Income",   data:inc, backgroundColor:c("--income"),  borderRadius:3},
+      {label:"Expenses", data:exp, backgroundColor:c("--expense"), borderRadius:3},
+    ]},
+    options:{plugins:{legend:{labels:{color:TICK(),font:{size:12}}},tooltip:{callbacks:{label:tipLabel}}}, scales:moneyAxes()},
+  });
+  const active = months.filter((_,i)=>inc[i]||exp[i]).length;
+  document.getElementById(capId).textContent = active
+    ? `${active} month${active===1?"":"s"} with activity · running profit ends at ${money0(cum[11])}${aptId?"":" (all rentals combined)"}.`
+    : "No activity recorded in this fiscal year yet.";
+}
+
+// Income / expenses / profit grouped per fiscal year.
+function renderYearsChart(){
+  const ys = allYearsSummaries();
+  mk("chartYears",{
+    type:"bar",
+    data:{labels:ys.map(y=>fyLabel(y.fy)),datasets:[
+      {label:"Income",   data:ys.map(y=>y.income),   backgroundColor:c("--income"),  borderRadius:3},
+      {label:"Expenses", data:ys.map(y=>y.expenses), backgroundColor:c("--expense"), borderRadius:3},
+      {label:"Profit",   data:ys.map(y=>y.profit),   backgroundColor:c("--profit"),  borderRadius:3},
+    ]},
+    options:{plugins:{legend:{labels:{color:TICK(),font:{size:12}}},tooltip:{callbacks:{label:tipLabel}}}, scales:moneyAxes()},
+  });
+}
+
+// Tax paid by each person per fiscal year.
+// One series per person, in their own colour — the same colour as their avatar
+// in Profit split, so a bar and a row are read as the same person.
+function renderTaxChart(canvasId){
+  const ys = allYearsSummaries();
+  mk(canvasId,{
+    type:"bar",
+    data:{labels:ys.map(y=>fyLabel(y.fy)), datasets: people().map(p => ({
+      label: p.name + " tax",
+      // Each year's own per-person figures, so a person added later simply has
+      // no bar in the years before them rather than a wrong one.
+      data: ys.map(y => (y.per.find(x => x.id === p.id) || {tax:0}).tax),
+      backgroundColor: p.color,
+      borderRadius: 3,
+    }))},
+    options:{plugins:{legend:{labels:{color:TICK(),font:{size:12}}},tooltip:{callbacks:{label:tipLabel}}}, scales:moneyAxes()},
+  });
+}
+
+// Income / expenses / profit grouped per fiscal year, for ONE property only.
+function renderPropYearsChart(aptId){
+  const ys = allFYs().map(fy => ({fy, ...propSummary(fy, aptId)}));
+  mk("chartPropYears",{
+    type:"bar",
+    data:{labels:ys.map(y=>fyLabel(y.fy)),datasets:[
+      {label:"Income",   data:ys.map(y=>y.income),   backgroundColor:c("--income"),  borderRadius:3},
+      {label:"Expenses", data:ys.map(y=>y.expenses), backgroundColor:c("--expense"), borderRadius:3},
+      {label:"Profit",   data:ys.map(y=>y.profit),   backgroundColor:c("--profit"),  borderRadius:3},
+    ]},
+    options:{plugins:{legend:{labels:{color:TICK(),font:{size:12}}},tooltip:{callbacks:{label:tipLabel}}}, scales:moneyAxes()},
+  });
+}
+
+// Lifetime totals strip across all years.
+function renderLifetime(){
+  const t = lifetime();
+  const items = [["Total income",t.income],["Total expenses",t.expenses],["Total profit",t.profit],
+                 ["Total tax",t.totalTax],["Total take-home",t.takeHome]];
+  document.getElementById("lifetime").innerHTML = items.map(([l,v])=>`
+    <div><div class="ll">${l}</div><div class="lv">${money0(v)}</div></div>`).join("");
+}
+
+// ============================================================
+//  ACTIONS — talk to the server, then reload so the UI updates.
+// ============================================================
+// Small POST helper that sends JSON and returns the parsed JSON reply.
+async function post(url,body){
+  const res = await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  return res.json();
+}
+
+// ============================================================
+//  A LINE — one dialog for income and expenses, new and existing.
+//  It holds the only delete there is: on the ledger row, delete sat
+//  a thumb-width from edit and could not be undone from the row.
+// ============================================================
+let LINE = null;   // {kind, id|null} — what the dialog is currently editing
+
+const lineError = msg => {
+  const el = document.getElementById("lineErr");
+  el.textContent = msg; el.classList.toggle("show", !!msg);
+};
+
+// The rate for a currency, as the store has it today. A NEW line starts here;
+// an existing one keeps whatever rate it was entered at.
+// The currency a NEW line of this kind starts in. A setting, not a guess: the
+// alternative is remembering the last one used, which changes under you.
+const defaultCurFor = kind => {
+  const d = (DATA && DATA.settings && DATA.settings.defaultCurrency) || {};
+  const code = d[kind];
+  return currencies().some(x => x.code === code) ? code : baseCur();
+};
+
+const rateOf = code => {
+  const cur = currencies().find(x => x.code === code);
+  return (cur && Number(cur.rate)) || 1;
+};
+
+function drawLineFx(){
+  const code = document.getElementById("liCur").value;
+  const base = baseCur();
+  const isBase = code === base;
+  document.getElementById("liFxWrap").style.display = isBase ? "none" : "";
+  document.getElementById("liSym").textContent = (currencies().find(x => x.code === code) || {}).symbol || code;
+  document.getElementById("liBase").textContent = base;
+  if(isBase) return;
+  const fx = +document.getElementById("liFx").value || 0;
+  const amt = +document.getElementById("liAmt").value || 0;
+  // Say what it comes to, so the rate is checkable at a glance rather than on
+  // trust — this is the number that lands in every total.
+  document.getElementById("liFxHint").textContent = fx > 0
+    ? `${inCur(amt, code)} ÷ ${fx} = ${inCur(amt / fx, base)} — frozen onto this line, so changing the rate in Settings never restates it.`
+    : "A rate is needed to convert this into " + base + ".";
+}
+
+function openLine(kind, id){
+  const rec = id ? (DATA[kind] || []).find(r => r.id === id) : null;
+  LINE = {kind, id: id || null};
+  const isExp = kind === "expenses";
+  setTitle("lineTitle", (rec ? "Edit " : "Add ") + (isExp ? "expense" : "income"),
+    isExp ? [KICON.expense, "--out-ink"] : [KICON.income, "--in-ink"]);
+  document.getElementById("liCatWrap").style.display = isExp ? "" : "none";
+  document.getElementById("liCat").innerHTML = CATS.map(ct =>
+    `<option value="${ct.id}"${rec && rec.category === ct.id ? " selected" : ""}>${ct.icon} ${ct.label}</option>`).join("");
+  document.getElementById("liCur").innerHTML = currencies().map(x =>
+    `<option value="${esc(x.code)}"${rec && rec.currency === x.code ? " selected" : ""}>${esc(x.code)}</option>`).join("");
+  // A new line opens in whatever that kind is usually paid in — rent in the
+  // base, bills often somewhere else. An existing line keeps its own.
+  if(!rec) document.getElementById("liCur").value = defaultCurFor(kind);
+
+  document.getElementById("liDate").value = rec ? rec.date : defaultDateFor(FY);
+  document.getElementById("liNote").value = rec ? (rec.note || "") : "";
+  document.getElementById("liAmt").value  = rec ? rec.amount : "";
+  document.getElementById("liFx").value   = rec ? rec.fx : rateOf(baseCur());
+  document.getElementById("liDel").style.display = rec ? "" : "none";
+  lineError("");
+  drawLineFx();
+  document.getElementById("lineBg").classList.add("open");
+  document.getElementById("liAmt").focus();
+}
+const closeLine = () => document.getElementById("lineBg").classList.remove("open");
+
+async function saveLine(){
+  const kind = LINE.kind;
+  const amount = document.getElementById("liAmt").value;
+  const date = document.getElementById("liDate").value;
+  const currency = document.getElementById("liCur").value;
+  // The same strict rule the server applies, said here first so the dialog can
+  // point at the field rather than reporting a 400.
+  if(badAmount(amount) || +amount < 0){ lineError("Amount must be a number — digits and one dot only (no commas)."); return; }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ lineError("A date is needed."); return; }
+  const fx = currency === baseCur() ? 1 : +document.getElementById("liFx").value;
+  if(!(fx > 0)){ lineError(`A rate is needed to convert ${currency} into ${baseCur()}.`); return; }
+
+  const body = {apartment: VIEW, date, amount, currency, fx, note: document.getElementById("liNote").value};
+  if(kind === "expenses") body.category = document.getElementById("liCat").value;
+
+  const res = LINE.id
+    ? await fetch(`/api/${kind}/${LINE.id}`, {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}).then(r => r.json())
+    : await post(`/api/${kind}`, body);
+  if(res.error){ lineError("Not saved: " + res.error); return; }
+  closeLine();
+  await load();
+}
+
+async function deleteLine(){
+  if(!LINE || !LINE.id) return;
+  if(!confirm("Delete this line? A snapshot is taken first, so Restore is the way back.")) return;
+  await fetch(`/api/${LINE.kind}/${LINE.id}`, {method:"DELETE"});
+  closeLine();
+  await load();
+}
+
+// Persist both tax percentages for the selected fiscal year.
+// Every rate on screen, in one write, keyed by person id. Sent as a whole row
+// rather than one field at a time so a half-saved year cannot exist.
+async function saveRates(idPrefix){
+  const rates = {};
+  people().forEach(p => {
+    const el = document.getElementById(`rate_${idPrefix}${p.id}`);
+    if(el) rates[p.id] = el.value;
+  });
+  const r = await post("/api/taxrate", {fy: FY, rates});
+  if(r.error) return alert("Not saved: " + r.error);
+  await load();
+}
+
+// Switch the selected fiscal year (no server call — just re-render).
+// Any in-progress inline edit is abandoned — its row belongs to the old year.
+function selectFY(fy){ FY = fy; render(); }
+
+// ---- Snapshot restore (the server's rolling backups, see /api/backups) ----
+// Fetch the snapshot list and show the modal.
+async function openRestore(){
+  const list = await (await fetch("/api/backups")).json();
+  const fmt = iso => iso.replace("T"," ").slice(0,19);   // "2026-07-03 10:15:30"
+  document.getElementById("snapList").innerHTML = list.length
+    ? list.map(s => `
+      <div class="snaprow">
+        <span class="when">${fmt(s.mtime)}</span>
+        <span class="sz">${(s.size/1024).toFixed(1)} kB</span>
+        <button class="btn" data-snap="${s.name}">Restore</button>
+      </div>`).join("")
+    : `<div class="empty">No snapshots yet — one is created automatically on every change.</div>`;
+  document.getElementById("restoreBg").classList.add("open");
+}
+
+// Replace the store with one snapshot (server snapshots the current state first).
+async function restoreSnap(name){
+  if(!confirm("Replace ALL current data with this snapshot?\n(The current state is snapshotted first, so a restore can be undone.)")) return;
+  const r = await post("/api/restore", {name});
+  if(r.error){ alert("Restore failed: " + r.error); return; }
+  document.getElementById("restoreBg").classList.remove("open");
+  await load();
+}
+
+// Add the next empty fiscal year as a tab so you can pre-set its tax rates, etc.
+function addYear(){
+  const list = allFYs();
+  const next = fyStart(list[list.length-1]) + 1;
+  const fy = next + "-" + (next + 1);
+  if(!extraFYs.includes(fy)) extraFYs.push(fy);
+  FY = fy;
+  render();
+}
+
+// ============================================================
+//  RENTALS — add, edit, delete. A rental is what every income and
+//  expense row is filed under, so deleting one takes its records
+//  with it; that is why the guard is typing its name.
+// ============================================================
+let EDIT_RENTAL = null;    // the rental being edited, or null when adding one
+let PICKED_COLOR = RENTAL_COLORS[0];
+
+const rentalError = msg => {
+  const el = document.getElementById("rentalErr");
+  el.textContent = msg; el.classList.toggle("show", !!msg);
+};
+
+function drawSwatches(){
+  document.getElementById("rColors").innerHTML = RENTAL_COLORS.map(col =>
+    `<button class="sw${col === PICKED_COLOR ? " on" : ""}" data-color="${col}" style="background:${col}" aria-label="Colour ${col}"></button>`).join("");
+}
+
+function openRental(aptId){
+  EDIT_RENTAL = aptId ? aptById(aptId) : null;
+  const a = EDIT_RENTAL;
+  // A new rental gets the first colour nothing else is using, so two rentals
+  // are never the same colour by default — which is the whole point of having one.
+  const used = new Set(apts().map(x => x.color));
+  PICKED_COLOR = a ? a.color : (RENTAL_COLORS.find(col => !used.has(col)) || RENTAL_COLORS[0]);
+  setTitle("rentalTitle", a ? "Edit rental" : "Add a rental");
+  document.getElementById("rName").value   = a ? a.name : "";
+  document.getElementById("rAirbnb").value = a ? a.links.airbnb : "";
+  document.getElementById("rDash").value   = a ? a.links.dashboard : "";
+  document.getElementById("rNet").value    = a ? a.links.internet : "";
+  document.getElementById("rNote").value   = a ? a.note : "";
+  document.getElementById("rDelete").style.display = a ? "" : "none";
+  drawSwatches();
+  rentalError("");
+  document.getElementById("rInfo").classList.remove("open");
+  document.getElementById("rInfoBtn").setAttribute("aria-expanded", false);
+  document.getElementById("rentalBg").classList.add("open");
+}
+const closeRental = () => document.getElementById("rentalBg").classList.remove("open");
+
+async function saveRental(){
+  const body = {
+    name: document.getElementById("rName").value,
+    color: PICKED_COLOR,
+    links: {
+      airbnb:    document.getElementById("rAirbnb").value,
+      dashboard: document.getElementById("rDash").value,
+      internet:  document.getElementById("rNet").value,
+    },
+    note: document.getElementById("rNote").value,
+  };
+  if(!body.name.trim()){ rentalError("A rental needs a name."); return; }
+  const res = EDIT_RENTAL
+    ? await fetch(`/api/apartments/${EDIT_RENTAL.id}`, {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}).then(r => r.json())
+    : await post("/api/apartments", body);
+  if(res.error){ rentalError("Not saved: " + res.error); return; }
+  closeRental();
+  await load();
+  if(!EDIT_RENTAL) selectView(res.id);   // land on the rental you just made
+}
+
+// ======================== people ========================
+// Same shape as the rental dialog, and deliberately so: adding an owner and
+// adding a property are the same kind of act, and the second one taught the
+// first what it should look like.
+let EDIT_PERSON = null;
+let PICKED_PERSON_COLOR = RENTAL_COLORS[0];
+
+const personError = msg => {
+  const el = document.getElementById("personErr");
+  el.textContent = msg; el.classList.toggle("show", !!msg);
+};
+
+function drawPersonSwatches(){
+  document.getElementById("pColors").innerHTML = RENTAL_COLORS.map(col =>
+    `<button class="sw${col === PICKED_PERSON_COLOR ? " on" : ""}" data-pcolor="${col}"
+             style="background:${col}" aria-label="Colour ${col}"></button>`).join("");
+}
+
+function openPerson(personId){
+  EDIT_PERSON = personId ? personById(personId) : null;
+  const p = EDIT_PERSON;
+  // A new person gets the first colour nobody is using, so two owners are never
+  // the same colour by default — which is what the colour is for.
+  const used = new Set(people().map(x => x.color));
+  PICKED_PERSON_COLOR = p ? p.color : (RENTAL_COLORS.find(col => !used.has(col)) || RENTAL_COLORS[0]);
+  setTitle("personTitle", p ? "Edit person" : "Add a person");
+  document.getElementById("pName").value = p ? p.name : "";
+  // A new person is offered whatever is left of 100%, so the common case —
+  // adding the second of two equal owners — needs no arithmetic.
+  const taken = people().filter(x => !p || x.id !== p.id).reduce((t, x) => t + x.share, 0);
+  document.getElementById("pShare").value = p ? p.share : Math.max(0, Math.round((100 - taken) * 10) / 10);
+  const rates = DATA.taxRates[FY] || {};
+  document.getElementById("pRate").value = p ? (rates[p.id] || "") : "";
+  document.getElementById("pRateFY").textContent = `(${fyLabel(FY)})`;
+  document.getElementById("pDelete").style.display = p ? "" : "none";
+  drawPersonSwatches();
+  personError("");
+  document.getElementById("pInfo").classList.remove("open");
+  document.getElementById("pInfoBtn").setAttribute("aria-expanded", false);
+  document.getElementById("personBg").classList.add("open");
+  document.getElementById("pName").focus();
+}
+const closePerson = () => document.getElementById("personBg").classList.remove("open");
+
+async function savePerson(){
+  const name = document.getElementById("pName").value;
+  if(!name.trim()){ personError("A person needs a name."); return; }
+  const body = {name, color: PICKED_PERSON_COLOR, share: document.getElementById("pShare").value};
+  const res = EDIT_PERSON
+    ? await fetch(`/api/people/${EDIT_PERSON.id}`, {method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}).then(r => r.json())
+    : await post("/api/people", body);
+  if(res.error){ personError("Not saved: " + res.error); return; }
+  // The rate belongs to the year on screen, so it is a second write — and it
+  // needs the person to exist first, which is why it cannot be one.
+  const rate = document.getElementById("pRate").value;
+  if(String(rate).trim() !== ""){
+    const r2 = await post("/api/taxrate", {fy: FY, rates: {[res.id]: rate}});
+    if(r2.error){ personError("Saved, but the tax % was not: " + r2.error); await load(); return; }
+  }
+  closePerson();
+  await load();
+}
+
+// --- removing, with their rates --------------------------------------------
+function openPersonDelete(){
+  const p = EDIT_PERSON;
+  if(!p) return;
+  const years = Object.values(DATA.taxRates).filter(row => row && row[p.id] !== undefined).length;
+  document.getElementById("pDelWhat").textContent = years
+    ? `${p.name} has a tax % set for ${years} year${years === 1 ? "" : "s"}. Removing them removes those too, and their ${p.share}% share stops being assigned to anyone. A snapshot is taken first, so Restore is the way back.`
+    : `${p.name} has no tax percentages set. Their ${p.share}% share stops being assigned to anyone.`;
+  document.getElementById("pDelName").value = "";
+  closePerson();                       // one dialog at a time, not two stacked
+  document.getElementById("pDelBg").classList.add("open");
+}
+const closePersonDelete = () => document.getElementById("pDelBg").classList.remove("open");
+
+async function confirmPersonDelete(){
+  const p = EDIT_PERSON;
+  if(!p) return;
+  const typed = document.getElementById("pDelName").value.trim().toLowerCase();
+  if(typed !== p.name.trim().toLowerCase()){
+    alert(`Type "${p.name}" to confirm — that is the guard, and it is deliberate.`);
+    return;
+  }
+  const res = await fetch(`/api/people/${p.id}`, {method:"DELETE"}).then(r => r.json());
+  if(res.error){ alert("Not removed: " + res.error); return; }
+  closePersonDelete();
+  EDIT_PERSON = null;
+  await load();
+}
+
+// --- deleting, with its records ---------------------------------------------
+function openRentalDelete(){
+  const a = EDIT_RENTAL;
+  if(!a) return;
+  const n = DATA.income.filter(r => r.apartment === a.id).length
+          + DATA.expenses.filter(r => r.apartment === a.id).length;
+  document.getElementById("rDelWhat").textContent = n
+    ? `${a.name} has ${n} record${n === 1 ? "" : "s"}. Deleting it deletes that income and those expenses too. A snapshot is taken first, so Restore is the way back.`
+    : `${a.name} has no records yet.`;
+  document.getElementById("rDelName").value = "";
+  closeRental();                       // one dialog at a time, not two stacked
+  document.getElementById("rDelBg").classList.add("open");
+}
+const closeRentalDelete = () => document.getElementById("rDelBg").classList.remove("open");
+
+async function confirmRentalDelete(){
+  const a = EDIT_RENTAL;
+  if(!a) return;
+  // Match on intent, not spelling: trimmed and case-insensitive.
+  const typed = document.getElementById("rDelName").value.trim().toLowerCase();
+  if(typed !== a.name.trim().toLowerCase()){
+    alert(`Type "${a.name}" to confirm — that is the guard, and it is deliberate.`);
+    return;
+  }
+  const res = await fetch(`/api/apartments/${a.id}`, {method:"DELETE"}).then(r => r.json());
+  if(res.error){ alert("Not deleted: " + res.error); return; }
+  closeRentalDelete();
+  EDIT_RENTAL = null;
+  VIEW = "overview";
+  await load();
+}
+
+// ============================================================
+//  SETTINGS — app-wide values kept in the store (not per device,
+//  so two phones cannot quietly estimate at two different rates).
+// ============================================================
+// The ECB reference set, which is exactly what Frankfurter can return — so the
+// only currencies "Update rates online" can fill in. Anything outside it needs a
+// rate typed by hand, and the row says so rather than leaving you to notice that
+// the button never touched it.
+const ECB = new Set(["AUD","BGN","BRL","CAD","CHF","CNY","CZK","DKK","EUR","GBP","HKD","HUF","IDR",
+  "ILS","INR","ISK","JPY","KRW","MXN","MYR","NOK","NZD","PHP","PLN","RON","SEK","SGD","THB","TRY","USD","ZAR"]);
+// The list of currencies comes from the device, not the internet — every name
+// and symbol offered is one this browser already knows, so it works offline.
+const CUR_CODES = (() => {
+  try { const v = Intl.supportedValuesOf("currency"); if(v && v.length) return v; } catch(_){}
+  return [...ECB];                              // pre-2022 browsers: the useful ones
+})();
+const curName = code => { try { return new Intl.DisplayNames([navigator.language || "en"], {type:"currency"}).of(code) || code; }
+                          catch(_){ return code; } };
+// narrowSymbol gives "£" rather than "GBP"; it falls back to the code itself for
+// currencies that have no symbol of their own, which is the right answer.
+const curSymbol = code => {
+  try {
+    return new Intl.NumberFormat(navigator.language || "en",
+      {style:"currency", currency:code, currencyDisplay:"narrowSymbol"})
+      .formatToParts(0).find(p => p.type === "currency").value;
+  } catch(_){ return code; }
+};
+
+// Every currency the store knows about, base first. One source: the rows in the
+// dialog are drawn from this, so a currency cannot exist in the UI and not in
+// the store — which is how a rate ends up being edited and going nowhere.
+const currencies = () => ((DATA && DATA.settings || {}).currencies) || [];
+const baseCur = () => ((DATA && DATA.settings || {}).baseCurrency) || "USD";
+// The one rate anything actually reads today: the estimator works in £.
+const fxRate = () => {
+  const gbp = currencies().find(c => c.code === "GBP");
+  return (gbp && Number(gbp.rate)) || 0.79;
+};
+
+// What each rate is for, said next to the rate itself. A row with no purpose
+// stated is a row someone will eventually "fix" to a number nothing uses.
+function curHint(code, base){
+  if(code === (base || baseCur())) return ["", "base currency — every stored figure is in this"];
+  if(!ECB.has(code)) return ["", "typed by hand — the ECB does not publish this one"];
+  if(code === "GBP") return ["auto", "↻ fills itself · also used by the tax estimator"];
+  return ["auto", "↻ fills itself · available in the header dropdown"];
+}
+
+// The dialog edits a WORKING COPY: rows, the base select and the picker are all
+// drawn from `list`, so adding and removing currencies is undoable by pressing
+// Cancel. Nothing is stored until Save.
+function drawCurRows(list){
+  const base = (document.getElementById("setBase") || {}).value || baseCur();
+  document.getElementById("curRows").innerHTML = list.map((c, i) => {
+    const isBase = c.code === base;
+    const [cls, hint] = curHint(c.code, base);
+    return `
+    <div class="currow" data-i="${i}" data-code="${esc(c.code)}">
+      <input class="mono cc" value="${esc(c.code)}" readonly aria-label="Currency code" />
+      <input class="cs" value="${esc(c.symbol)}" maxlength="4" aria-label="Symbol for ${esc(c.code)}" />
+      <input class="mono cr" type="number" inputmode="decimal" step="0.01" value="${c.rate}"
+             placeholder="0.00" aria-label="Rate for ${esc(c.code)}"${isBase ? " readonly" : ""} />
+      <button class="cdel" title="${isBase ? "The base currency cannot be removed" : "Remove " + esc(c.code)}"${isBase ? " disabled" : ""}>✕</button>
+      <div class="curhint${cls ? " " + cls : ""}">${hint}</div>
+    </div>`; }).join("");
+  document.querySelectorAll("#curRows .cdel").forEach(b => b.onclick = () => {
+    const list2 = readCurRows();
+    list2.splice(+b.parentElement.dataset.i, 1);
+    drawCurRows(list2); drawBaseSelect(list2); drawCurPicker(list2); drawEntryDefaults(list2);
+  });
+}
+
+// Grouped so the ones whose rates look after themselves come first; the ones
+// already in the table are left out entirely rather than offered twice.
+function drawCurPicker(list){
+  const have = new Set(list.map(c => c.code));
+  const opt = c => `<option value="${c}">${c} — ${esc(curName(c))} (${esc(curSymbol(c))})</option>`;
+  const online = CUR_CODES.filter(c => ECB.has(c) && !have.has(c));
+  const rest   = CUR_CODES.filter(c => !ECB.has(c) && !have.has(c));
+  document.getElementById("addCur").innerHTML =
+    `<option value="">Choose a currency…</option>`
+    + (online.length ? `<optgroup label="Rates update online">${online.map(opt).join("")}</optgroup>` : "")
+    + (rest.length   ? `<optgroup label="All currencies">${rest.map(opt).join("")}</optgroup>` : "");
+}
+
+// Which currency a new line of each kind opens in. Drawn from the working copy
+// like everything else in this dialog, so a currency added or removed above is
+// offered — or withdrawn — before it is saved.
+function drawEntryDefaults(list){
+  const d = (DATA.settings && DATA.settings.defaultCurrency) || {};
+  [["defIncome", "income"], ["defExpense", "expenses"]].forEach(([id, kind]) => {
+    const sel = document.getElementById(id);
+    const keep = sel.value || d[kind] || baseCur();
+    sel.innerHTML = list.map(c => `<option value="${esc(c.code)}">${esc(c.code)}</option>`).join("");
+    sel.value = list.some(c => c.code === keep) ? keep
+      : (list.some(c => c.code === baseCur()) ? baseCur() : (list[0] && list[0].code));
+  });
+}
+
+function drawBaseSelect(list){
+  const sel = document.getElementById("setBase");
+  const keep = sel.value || baseCur();
+  sel.innerHTML = list.map(c => `<option value="${esc(c.code)}">${esc(c.code)}</option>`).join("");
+  sel.value = list.some(c => c.code === keep) ? keep : (list[0] && list[0].code);
+  // Base is the currency every stored figure is denominated in. Changing it once
+  // records exist would relabel every one of them without converting a single
+  // figure. Locked as soon as there is anything to mislabel — the header
+  // dropdown covers the real need, which is *viewing* in another currency.
+  const n = (DATA.income.length + DATA.expenses.length);
+  sel.disabled = n > 0;
+  document.getElementById("baseNote").textContent = n
+    ? `Locked: ${n} record${n > 1 ? "s are" : " is"} stored in ${baseCur()}. Use the currency dropdown in the header to view in another currency.`
+    : "Can be changed while the ledger is empty.";
+}
+
+// Read the rows back in the order they are shown.
+const readCurRows = () => [...document.querySelectorAll("#curRows .currow")].map(r => ({
+  code: r.dataset.code,
+  symbol: r.querySelector(".cs").value,
+  rate: r.querySelector(".cr").value,
+}));
+
+function openFx(){
+  const list = currencies().map(c => ({...c}));   // a working copy: Cancel really cancels
+  document.getElementById("setBase").value = baseCur();
+  drawCurRows(list); drawBaseSelect(list); drawCurPicker(list); drawEntryDefaults(list);
+  fxError("");
+  document.getElementById("fxBg").classList.add("open");
+}
+const closeFx = () => document.getElementById("fxBg").classList.remove("open");
+
+// Errors belong in the dialog, next to the field that caused them — an alert()
+// is dismissed by reflex and takes the message with it.
+function fxError(msg){
+  const el = document.getElementById("fxErr");
+  el.textContent = msg;
+  el.classList.toggle("show", !!msg);
+}
+
+async function saveFx(){
+  const rows = readCurRows();
+  const base = document.getElementById("setBase").value;
+  // Same rule as every other number in the app: junk is refused, not read as 0.
+  // A rate of 0 would report a tax estimate of nothing at all rather than failing.
+  const bad = rows.find(r => r.code !== base && (badAmount(r.rate) || +r.rate <= 0));
+  if(bad){ fxError(`The ${bad.code} rate must be a positive number — digits and one dot only. A currency the ECB does not publish needs one typed.`); return; }
+  const r = await post("/api/settings", {currencies: rows, baseCurrency: base, defaultCurrency: {
+    income:   document.getElementById("defIncome").value,
+    expenses: document.getElementById("defExpense").value,
+  }});
+  if(r.error){ fxError("Not saved: " + r.error); return; }
+  closeFx();
+  await load();
+}
+
+// ---- The one outbound request, on this button only --------------------------
+// The button's own label reports the result: no toast to miss, and no silent
+// failure. It reverts to "Rates" after a few seconds so the header settles back.
+const ratesBtn = () => document.getElementById("ratesBtn");
+function ratesState(cls, text, revert){
+  ratesBtn().className = "btn" + (cls ? " " + cls : "");
+  document.getElementById("ratesLbl").textContent = text;
+  if(revert) setTimeout(() => {
+    ratesBtn().className = "btn";
+    document.getElementById("ratesLbl").textContent = "Rates";
+  }, 6000);
+}
+
+async function refreshRates(){
+  ratesBtn().disabled = true;
+  ratesState("", "Updating…");
+  const r = await post("/api/rates/refresh", {});
+  ratesBtn().disabled = false;
+  if(r.error){
+    // Nothing was written: a stale rate that looks fresh is worse than an error.
+    ratesState("bad", "Rates update failed", true);
+    fxError("Could not update rates: " + r.error + " — the stored rate is unchanged, and you can still type one.");
+    return;
+  }
+  await load();                                   // pick up the new rates
+  const list = currencies().map(c => ({...c}));   // and show them, if the dialog is open
+  drawCurRows(list); drawBaseSelect(list); drawCurPicker(list); drawEntryDefaults(list);
+  ratesState("ok", r.updated.length ? `Updated · ${r.date}` : "Already current", true);
+  if(r.skipped && r.skipped.length){
+    fxError(`The ECB does not publish ${r.skipped.join(", ")} — ${r.skipped.length === 1 ? "that rate is" : "those rates are"} still the one you typed.`);
+  }
+}
+
+// ============================================================
+//  OPTIONAL TAX-% ESTIMATOR (the "hybrid" helper)
+//  Pure UI sugar: it computes an effective % from UK marginal
+//  bands and offers to drop that number into the flat-% field.
+//  Nothing here changes how data is stored — the saved value is
+//  still the single flat % per person per year.
+// ============================================================
+
+// England/Wales/NI defaults for 2025/26 (editable in the modal).
+const DEFAULT_BANDS = {pa:12570, ht:50270, at:125140, br:20, hr:40, ar:45};
+let calcTarget = null;   // the id of the person the modal is currently estimating
+
+// Pure UK income-tax on a £ amount, filling the bands bottom-up.
+// rates (br/hr/ar) are percentages; thresholds are £.
+function ukIncomeTax(income, B){
+  let pa = B.pa;
+  if(income > 100000) pa = Math.max(0, pa - (income - 100000) / 2);  // allowance taper over £100k
+  const taxable = Math.max(0, income - pa);
+  const basicWidth  = Math.max(0, B.ht - B.pa);            // width of the 20% band (taxable): £37,700
+  // 40% band width in TAXABLE terms runs up to the additional threshold (£125,140),
+  // i.e. at − basicTop. Using (at − ht) would understate it and over-tax above ~£125k.
+  const higherWidth = Math.max(0, B.at - (B.ht - B.pa));   // £87,440
+  let tax = 0, rem = taxable;
+  const inBasic  = Math.min(rem, basicWidth);  tax += inBasic  * B.br/100; rem -= inBasic;
+  const inHigher = Math.min(rem, higherWidth); tax += inHigher * B.hr/100; rem -= inHigher;
+  tax += Math.max(0, rem) * B.ar/100;             // anything left is taxed at the additional rate
+  return tax;
+}
+
+// Tiny localStorage helpers — remember the estimator's convenience inputs
+// (other income, FX, bands) between sessions. These are NOT financial records,
+// just so you don't retype them; wrapped in try/catch so failure is harmless.
+const lsGet = (k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch{ return d; } };
+const lsSet = (k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} };
+
+// Read the (possibly edited) band inputs from the modal.
+function readBands(){
+  const g = id => +document.getElementById(id).value || 0;
+  return {pa:g("b_pa"), ht:g("b_ht"), at:g("b_at"), br:g("b_br"), hr:g("b_hr"), ar:g("b_ar")};
+}
+
+// Open the modal for one person, pre-filling remembered inputs + this year's share.
+function openCalc(personId){
+  calcTarget = personId;
+  const s = fySummary(FY);
+  const who = personById(personId);
+  if(!who) return;
+  setTitle("calcTitle", `Estimate ${who.name}'s % — ${fyLabel(FY)}`);
+  document.getElementById("calcOther").value = lsGet("calc_other_"+personId, "");
+  // One rate, from the store — see Settings › Currency rate.
+  document.getElementById("calcFxLbl").textContent = `${fxRate()} £ per 1 ${baseCur()}`;
+  const B = lsGet("calc_bands", DEFAULT_BANDS);
+  for(const k of ["pa","ht","at","br","hr","ar"]) document.getElementById("b_"+k).value = B[k];
+  // This person's own share of the profit, not half of it: the estimator stacks
+  // that figure on their other income, so the wrong share is the wrong band.
+  document.getElementById("calcBg").dataset.share =
+    (s.per.find(x => x.id === personId) || {amount:0}).amount;
+  recalc();
+  document.getElementById("calcBg").classList.add("open");
+}
+
+// Recompute the effective % live as inputs change.
+function recalc(){
+  const shareUSD = +document.getElementById("calcBg").dataset.share || 0;
+  const fx    = fxRate();
+  const other = +document.getElementById("calcOther").value || 0;
+  const B = readBands();
+  const shareGBP = shareUSD * fx;                              // convert $ share → £
+  // marginal tax on the share = tax(other+share) − tax(other)
+  const tax = ukIncomeTax(other + shareGBP, B) - ukIncomeTax(other, B);
+  const p = shareGBP > 0 ? (tax / shareGBP * 100) : 0;         // effective % (currency-independent)
+  const gbp = n => "£" + Math.round(n).toLocaleString("en-GB");
+  document.getElementById("calcShare").textContent = `${money0(shareUSD)} → ${gbp(shareGBP)}`;
+  document.getElementById("calcPct").textContent   = p.toFixed(1) + "%";
+  document.getElementById("calcDet").textContent   = `${gbp(tax)} tax on ${gbp(shareGBP)} share, stacked on ${gbp(other)} other income`;
+  document.getElementById("calcBg").dataset.pct = p.toFixed(1);   // stash result for "Use this %"
+}
+
+// Apply the estimated % to the flat-% field (saves via the normal taxrate endpoint).
+async function applyEstimate(){
+  const p = +document.getElementById("calcBg").dataset.pct || 0;
+  // remember the helper inputs for next time
+  lsSet("calc_other_"+calcTarget, document.getElementById("calcOther").value);
+  lsSet("calc_bands", readBands());
+  // Only this person's rate is sent; the endpoint merges it into the year, so
+  // everyone else's stays exactly as it was.
+  await post("/api/taxrate", {fy: FY, rates: {[calcTarget]: p}});
+  closeCalc();
+  await load();
+}
+
+function closeCalc(){ document.getElementById("calcBg").classList.remove("open"); calcTarget = null; }
+
+// ============================================================
+//  EVENT WIRING — one delegated listener per region instead of
+//  inline onclick="" attributes. Delegation works even though the
+//  buttons are recreated on every render (the listener lives on the
+//  stable parent container, not the buttons themselves).
+// ============================================================
+
+// Top-level view tabs: Overview, or one rental.
+document.getElementById("viewNav").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.view) selectView(b.dataset.view);
+});
+
+// The year row's right-hand cluster. A link is a link — it opens, and nothing
+// else happens; the note toggles; Edit opens the rental it belongs to.
+document.getElementById("rentalTools").addEventListener("click", e => {
+  if(e.target.closest("a")) return;
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.act === "edit-rental") openRental(VIEW);
+  else if(b.dataset.act === "note"){ NOTE_OPEN = !NOTE_OPEN; renderRentalTools(); }
+});
+
+// Year tabs: select a year, or add a new one.
+document.getElementById("tabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.fy) selectFY(b.dataset.fy);
+  else if(b.dataset.act === "add-year") addYear();
+});
+
+// The two ledgers: the header buttons add a line, a row opens the one it
+// belongs to. The whole row is the target — a pencil the width of a thumb is
+// the difference between editing a line and missing it.
+const ledgerAction = el => {
+  const t = el.closest("[data-act]");
+  if(!t) return;
+  if(t.dataset.act === "new") openLine(t.dataset.kind, null);
+  else if(t.dataset.act === "edit") openLine(t.dataset.kind, t.dataset.id);
+  else if(t.dataset.act === "filter"){ LFILTER = t.dataset.filter; renderPropertyCard(VIEW); }
+};
+// Delegated on the whole view, so both columns are covered by one listener
+// and neither re-render can drop it.
+document.getElementById("propertyView").addEventListener("click", e => ledgerAction(e.target));
+// Rows carry role="button" and a tabindex, so they answer the keyboard too.
+document.getElementById("propertyView").addEventListener("keydown", e => {
+  if(e.key === "Enter" || e.key === " "){
+    const row = e.target.closest(".lrow");
+    if(row){ e.preventDefault(); ledgerAction(e.target); }
+  }
+});
+
+// The line dialog.
+document.getElementById("liCancel").addEventListener("click", closeLine);
+document.getElementById("liSave").addEventListener("click", saveLine);
+document.getElementById("liDel").addEventListener("click", deleteLine);
+document.getElementById("lineBg").addEventListener("click", e => { if(e.target.id === "lineBg") closeLine(); });
+["liCur","liFx","liAmt"].forEach(id =>
+  document.getElementById(id).addEventListener("input", drawLineFx));
+document.getElementById("liCur").addEventListener("change", () => {
+  // A currency change without a matching rate change would convert at the last
+  // one — fill in today's for the currency just chosen.
+  document.getElementById("liFx").value = rateOf(document.getElementById("liCur").value);
+  drawLineFx();
+});
+
+// Profit-split panel: saving a tax % when the input loses focus / changes.
+document.getElementById("split").addEventListener("change", e => {
+  if(e.target.matches("input[data-rate]")) saveRates("");
+});
+// Profit-split panel: the estimator, editing a person, adding one. Delegated
+// on the card rather than the panel, because "+ Person" sits in the heading.
+document.getElementById("splitCard").addEventListener("click", e => {
+  const b = e.target.closest("[data-est],[data-act]");
+  if(!b) return;
+  if(b.hasAttribute("data-est")) return openCalc(b.dataset.person);
+  if(b.dataset.act === "edit-person") return openPerson(b.dataset.person);
+  if(b.dataset.act === "new-person") return openPerson(null);
+});
+
+// Estimator modal wiring (these elements are static, so listeners attach once).
+["calcOther","b_pa","b_ht","b_at","b_br","b_hr","b_ar"]
+  .forEach(id => document.getElementById(id).addEventListener("input", recalc));   // live recompute
+document.getElementById("calcCancel").addEventListener("click", closeCalc);
+document.getElementById("calcUse").addEventListener("click", applyEstimate);
+document.getElementById("calcBg").addEventListener("click", e => { if(e.target.id === "calcBg") closeCalc(); }); // click backdrop to close
+
+// Snapshot-restore modal: open, pick a snapshot (delegated), close.
+document.getElementById("restoreBtn").addEventListener("click", openRestore);
+document.getElementById("restoreCancel").addEventListener("click", () => document.getElementById("restoreBg").classList.remove("open"));
+document.getElementById("restoreBg").addEventListener("click", e => { if(e.target.id === "restoreBg") document.getElementById("restoreBg").classList.remove("open"); }); // click backdrop to close
+document.getElementById("snapList").addEventListener("click", e => {
+  const b = e.target.closest("[data-snap]"); if(b) restoreSnap(b.dataset.snap);
+});
+
+// Save / Load backups. Save is a link; Load opens the hidden file picker,
+// reads the chosen JSON, and POSTs it to /api/import.
+document.getElementById("loadBtn").addEventListener("click", () => document.getElementById("fileInput").click());
+document.getElementById("fileInput").addEventListener("change", async e => {
+  const f = e.target.files && e.target.files[0];
+  if(!f) return;
+  try{
+    const data = JSON.parse(await f.text());     // parse the uploaded file
+    const res  = await post("/api/import", data); // server validates + replaces the store
+    if(res.error) alert("Import failed: " + res.error);
+    else await load();                            // success: refresh the UI
+  }catch(err){
+    alert("That file couldn't be read as saved data.");
+  }
+  e.target.value = "";                            // reset so the same file can be re-picked
+});
+
+// --- Rentals ----------------------------------------------------------------
+document.getElementById("addRentalBtn").addEventListener("click", () => openRental(null));
+document.getElementById("firstRentalBtn").addEventListener("click", () => openRental(null));
+document.getElementById("rColors").addEventListener("click", e => {
+  const b = e.target.closest("[data-color]");
+  if(!b) return;
+  PICKED_COLOR = b.dataset.color;
+  drawSwatches();
+});
+document.getElementById("rInfoBtn").addEventListener("click", () => {
+  const open = document.getElementById("rInfo").classList.toggle("open");
+  document.getElementById("rInfoBtn").setAttribute("aria-expanded", open);
+});
+document.getElementById("rCancel").addEventListener("click", closeRental);
+document.getElementById("rSave").addEventListener("click", saveRental);
+document.getElementById("rDelete").addEventListener("click", openRentalDelete);
+document.getElementById("rentalBg").addEventListener("click", e => { if(e.target.id === "rentalBg") closeRental(); });
+document.getElementById("rDelCancel").addEventListener("click", closeRentalDelete);
+document.getElementById("rDelGo").addEventListener("click", confirmRentalDelete);
+document.getElementById("rDelBg").addEventListener("click", e => { if(e.target.id === "rDelBg") closeRentalDelete(); });
+
+// --- People -----------------------------------------------------------------
+document.getElementById("pColors").addEventListener("click", e => {
+  const b = e.target.closest("[data-pcolor]");
+  if(!b) return;
+  PICKED_PERSON_COLOR = b.dataset.pcolor;
+  drawPersonSwatches();
+});
+document.getElementById("pInfoBtn").addEventListener("click", () => {
+  const open = document.getElementById("pInfo").classList.toggle("open");
+  document.getElementById("pInfoBtn").setAttribute("aria-expanded", open);
+});
+document.getElementById("pCancel").addEventListener("click", closePerson);
+document.getElementById("pSave").addEventListener("click", savePerson);
+document.getElementById("pDelete").addEventListener("click", openPersonDelete);
+document.getElementById("personBg").addEventListener("click", e => { if(e.target.id === "personBg") closePerson(); });
+document.getElementById("pDelCancel").addEventListener("click", closePersonDelete);
+document.getElementById("pDelGo").addEventListener("click", confirmPersonDelete);
+document.getElementById("pDelBg").addEventListener("click", e => { if(e.target.id === "pDelBg") closePersonDelete(); });
+
+// --- Settings menu ----------------------------------------------------------
+const setMenu = document.getElementById("setMenu"), setMenuBtn = document.getElementById("setMenuBtn");
+setMenuBtn.addEventListener("click", e => {
+  e.stopPropagation();
+  setMenuBtn.setAttribute("aria-expanded", setMenu.classList.toggle("open"));
+});
+// Any click inside the menu is a chosen action, so close on the way through —
+// except on the version row, which reports its result in place.
+setMenu.addEventListener("click", e => {
+  if(!e.target.closest("[data-checkupd]")) setMenu.classList.remove("open");
+});
+document.addEventListener("click", e => {
+  if(!setMenu.contains(e.target) && e.target !== setMenuBtn) setMenu.classList.remove("open");
+});
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape"){ setMenu.classList.remove("open"); closeFx(); closeRental(); closeRentalDelete(); closeLine(); }
+});
+
+// --- Currency rate dialog ---------------------------------------------------
+document.getElementById("fxBtn").addEventListener("click", openFx);
+// The explanation is one click away and stays out of the way until asked for.
+document.getElementById("fxInfoBtn").addEventListener("click", () => {
+  const b = document.getElementById("fxInfoBtn");
+  const open = document.getElementById("fxInfo").classList.toggle("open");
+  b.setAttribute("aria-expanded", open);
+});
+document.getElementById("fxRefresh").addEventListener("click", refreshRates);
+// Adding a currency appends a row with a rate of 0 — deliberately not a guess.
+// The ECB ones fill themselves on the next refresh; the rest you type.
+document.getElementById("addCur").addEventListener("change", e => {
+  const code = e.target.value;
+  if(!code) return;
+  const list = readCurRows();
+  if(!list.some(c => c.code === code)){
+    // Symbol is pre-filled, not fixed: only you know whether "MX$" or "$" reads
+    // better on your own screen.
+    list.push({code, symbol: curSymbol(code), rate: 0});
+  }
+  drawCurRows(list); drawBaseSelect(list); drawCurPicker(list); drawEntryDefaults(list);
+  e.target.value = "";
+});
+// Viewing in another currency: a re-render, never a write.
+document.getElementById("dispCur").addEventListener("change", e => {
+  DISPLAY = e.target.value === baseCur() ? null : e.target.value;
+  render();
+});
+document.getElementById("ratesBtn").addEventListener("click", refreshRates);
+document.getElementById("fxCancel").addEventListener("click", closeFx);
+document.getElementById("fxSave").addEventListener("click", saveFx);
+document.getElementById("fxBg").addEventListener("click", e => { if(e.target.id === "fxBg") closeFx(); });
+
+// ============================================================
+//  APPEARANCE — light, dark, or follow the device.
+//  A per-device preference, so it lives in this browser rather than in the
+//  store: the same ledger can reasonably be read on a bright desk and a dark
+//  phone. "auto" stores nothing and lets the OS decide, which is why it is a
+//  real third option rather than a default nobody chose.
+// ============================================================
+// mode, label, icon path. The icon is drawn rather than typed as an emoji: an
+// emoji is a different glyph on every platform and cannot take the button's
+// colour, which is the one thing this control has to do.
+const THEME_MODES = [
+  ["light", "Light", `<circle cx="12" cy="12" r="4.2"/><path d="M12 2.4v2.6M12 19v2.6M4.2 12H1.6M22.4 12h-2.6M5.9 5.9 4.1 4.1M19.9 19.9l-1.8-1.8M18.1 5.9l1.8-1.8M4.1 19.9l1.8-1.8"/>`],
+  ["dark",  "Dark",  `<path d="M20.2 14.6A8.6 8.6 0 0 1 9.4 3.8a8.6 8.6 0 1 0 10.8 10.8z"/>`],
+  ["auto",  "Auto",  `<circle cx="12" cy="12" r="8.6"/><path d="M12 3.4v17.2a8.6 8.6 0 0 0 0-17.2z" fill="currentColor" stroke="none"/>`],
+];
+const themeMode = () => {
+  const t = lsGet("rl-theme", "auto");
+  return THEME_MODES.some(([m]) => m === t) ? t : "auto";
+};
+
+function applyTheme(mode){
+  if(mode === "auto") delete document.documentElement.dataset.theme;   // hand it back to the OS
+  else document.documentElement.dataset.theme = mode;
+  // The button shows where you are and says where the next press goes, which is
+  // the whole of its job. "Auto" is a decision made elsewhere — it follows the
+  // DEVICE's appearance setting, not the time of day — so it says which way that
+  // currently falls, or a dark app on a bright afternoon looks like a bug.
+  const i = Math.max(0, THEME_MODES.findIndex(([m]) => m === mode));
+  const [, label, icon] = THEME_MODES[i];
+  const btn = document.getElementById("themeBtn");
+  // The icon alone: sun, moon, half-circle are distinct enough to read at a
+  // glance, and the words live in the title and the aria-label where they are
+  // still available to a screen reader and to anyone who hovers.
+  btn.innerHTML = `<svg class="tico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg>`;
+  const resolved = mode !== "auto" ? "" :
+    (matchMedia("(prefers-color-scheme: dark)").matches ? " — your device is dark right now"
+                                                        : " — your device is light right now");
+  btn.title = `Appearance: ${label}${resolved}. Switch to ${THEME_MODES[(i + 1) % THEME_MODES.length][1]}.`;
+  btn.setAttribute("aria-label", btn.title);
+  // The charts read their colours from the stylesheet at draw time, so they
+  // have to be drawn again — otherwise the page is dark and the bars are not.
+  if(DATA) render();
+}
+
+// light → dark → auto → light. Wrapping rather than stopping at the end means
+// the button never becomes a dead control.
+function cycleTheme(){
+  const i = THEME_MODES.findIndex(([m]) => m === themeMode());
+  const next = THEME_MODES[(i + 1) % THEME_MODES.length][0];
+  lsSet("rl-theme", next);
+  applyTheme(next);
+}
+
+// ============================================================
+//  WHICH BUILD IS THIS?
+//  The page is stamped with its version as the server sends it, so a copy kept
+//  in a browser cache still knows which build it is. A cached app is the only
+//  kind that can be confidently wrong about itself: it renders, it looks
+//  finished, and nothing on screen says it is three releases behind.
+// ============================================================
+const APP_VERSION = (document.querySelector('meta[name="app-version"]') || {}).content || "dev";
+let serverVersion = null;
+
+function drawVersion(){
+  const stale = serverVersion && serverVersion !== APP_VERSION;
+  document.querySelectorAll("[data-ver] .v").forEach(el =>
+    el.textContent = stale ? `${APP_VERSION} → ${serverVersion}` : `Version ${APP_VERSION}`);
+}
+
+// no-store: a cached answer about staleness is worthless.
+async function checkVersion(){
+  try{
+    const r = await fetch("/api/version", {cache:"no-store"});
+    if(!r.ok) return;
+    serverVersion = (await r.json()).version || null;
+  }catch(_){ return; }        // offline: what is on screen is the truth
+  drawVersion();
+}
+
+// The query string is there so nothing can answer the reload from a cache.
+const reloadApp = () => location.replace(location.pathname + "?u=" + Date.now());
+
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-checkupd]");
+  if(!b) return;
+  // Say something either way, so the button never looks dead.
+  b.disabled = true; b.textContent = "Checking…";
+  await checkVersion();
+  if(serverVersion && serverVersion !== APP_VERSION) return reloadApp();
+  b.disabled = false;
+  b.textContent = serverVersion ? "Up to date" : "No connection";
+  setTimeout(() => { b.textContent = "Check for updates"; }, 4000);
+});
+
+document.getElementById("themeBtn").addEventListener("click", cycleTheme);
+// The device can change its appearance while the app is open. The CSS follows
+// on its own; the charts do not — they read the palette once, when drawn.
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if(themeMode() === "auto") applyTheme("auto");
+});
+// The inline script in <head> has already set the attribute; this puts the
+// label in agreement with it before anything is drawn.
+applyTheme(themeMode());
+
+drawVersion();
+checkVersion();
+
+// Once, before anything is drawn: the headings that never change their text.
+paintStaticTitles();
+
+// Kick everything off: fetch data and draw the page.
+load();
+</script>
+</body>
+</html>

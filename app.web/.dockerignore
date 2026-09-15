@@ -1,0 +1,9 @@
+# Never bake runtime data into the image — it lives on the mounted volume
+data/
+*.tmp
+
+# Not needed at runtime
+.dockerignore
+selfcheck.js
+test/
+node_modules/

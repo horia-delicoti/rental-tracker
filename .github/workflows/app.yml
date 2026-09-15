@@ -1,0 +1,157 @@
+name: App
+
+# Two behaviours from one workflow:
+#   push to main / PR  → verify, then build the image WITHOUT pushing and smoke
+#                        test that it actually boots
+#   push of a v* tag   → the same, then publish the multi-arch image to GHCR
+#
+# Deploying is a deliberate version bump: only a tag publishes an image. There
+# is intentionally no `latest` tag and no push from main — the Ansible role pins
+# an exact version, and a moving tag would defeat that.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+# Note: no `paths:` filter. It would apply to tag pushes too, so tagging a commit
+# that only touched website/ would silently skip publishing the release.
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # devDependencies only — the app itself ships zero runtime dependencies.
+      - name: Install dev tooling
+        run: npm ci
+
+      - name: Syntax
+        run: npm run syntax
+
+      - name: Lint
+        run: npm run lint
+
+      # Guards the invariants that fail SILENTLY — producing a wrong number
+      # rather than an error. See app.web/selfcheck.js and CLAUDE.md.
+      - name: Self check
+        run: npm run selfcheck
+
+      # Boots the real server against a throwaway data dir and drives it over
+      # HTTP. Catches what the self check cannot: that the app actually starts.
+      - name: Tests
+        run: npm test
+
+  build:
+    name: Build image
+    needs: verify
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Every docker/* action below is on the major that runs on Node 24
+      # (setup-qemu v4, setup-buildx v4, login v4, metadata v6, build-push v7).
+      # The "Node 20 is being deprecated" notice comes from the runtime GitHub
+      # uses to execute an action, not from node-version — so the fix is always
+      # a newer action version, never a workflow setting.
+      #
+      # arm64 for the Pi, amd64 so the image also runs anywhere else. The image
+      # only COPYs JavaScript — nothing is compiled — so emulation costs almost
+      # nothing here and avoids depending on arm64 runner availability.
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      # ---- Build a single-arch image first, so it can be loaded and RUN ----
+      # buildx cannot --load a multi-platform build, and an image that builds
+      # but does not boot is exactly the failure worth catching here.
+      - name: Build amd64 image for testing
+        uses: docker/build-push-action@v7
+        with:
+          context: ./app.web
+          platforms: linux/amd64
+          load: true
+          tags: rental-tracker:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test the image
+        run: |
+          set -euo pipefail
+          docker run -d --name rt-ci -p 8099:8099 rental-tracker:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8099/api/data >/dev/null 2>&1; then
+              echo "container answered after ${i}s"
+              curl -fsS http://127.0.0.1:8099/ | grep -qi '<html' \
+                && echo "app shell served"
+              docker rm -f rt-ci >/dev/null
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::container never answered on /api/data"
+          docker logs rt-ci || true
+          docker rm -f rt-ci >/dev/null || true
+          exit 1
+
+      # ---- Publish, tags only ----
+      - name: Log in to GHCR
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # v1.2.3 publishes 1.2.3, 1.2 and 1 — pin the exact one in Ansible.
+      - name: Docker meta
+        id: meta
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      - name: Build and push multi-arch
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/build-push-action@v7
+        with:
+          context: ./app.web
+          platforms: linux/amd64,linux/arm64
+          push: true
+          # github.ref_name is the tag being built (v1.3.1), so "what is
+          # running?" can be answered by the image itself rather than by
+          # whatever anyone last typed into Ansible.
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Keeps the GHCR package listing clean — provenance attestations show up
+          # as phantom "unknown/unknown" architecture entries next to the real ones.
+          provenance: false
+          sbom: false
