@@ -15,6 +15,14 @@ on:
     tags: ['v*']
   pull_request:
     branches: [main]
+  # Publishing must not hang on a single event firing once. Pushing v1.0.0 put
+  # the tag on GitHub and produced NO workflow run at all — so no image, and
+  # from outside no way to tell a tag that never triggered from one that failed.
+  # A dispatch takes the same publish path: the guards below test github.ref,
+  # and a dispatch sets that to whichever ref you pick in "Run workflow", tags
+  # included. Note this only works for tags whose OWN copy of this file has
+  # workflow_dispatch in it — the file is read from the ref being run.
+  workflow_dispatch:
 
 # Note: no `paths:` filter. It would apply to tag pushes too, so tagging a commit
 # that only touched website/ would silently skip publishing the release.
@@ -159,3 +167,30 @@ jobs:
           # as phantom "unknown/unknown" architecture entries next to the real ones.
           provenance: false
           sbom: false
+
+      # A green run that published nothing looks identical to one that did,
+      # which is how "the tag is there, where is the image?" happens. Say it.
+      - name: Report what this run did
+        if: always()
+        env:
+          PUBLISHED: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          REF: ${{ github.ref_name }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          if [ "$PUBLISHED" = "true" ]; then
+            {
+              echo "### Published"
+              echo ''
+              echo 'Pushed to GHCR:'
+              echo '```'
+              echo "$TAGS"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "### Built, not published"
+              echo ''
+              echo "\`$REF\` is not a v* tag, so the image was built and smoke tested but"
+              echo "nothing was pushed. Only a v* tag — or a dispatch on one — publishes."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
