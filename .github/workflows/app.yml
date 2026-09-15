@@ -31,7 +31,7 @@ jobs:
     name: Verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v5
         with:
@@ -68,7 +68,7 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Every docker/* action below is on the major that runs on Node 24
       # (setup-qemu v4, setup-buildx v4, login v4, metadata v6, build-push v7).
