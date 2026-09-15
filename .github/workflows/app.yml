@@ -142,11 +142,15 @@ jobs:
           context: ./app.web
           platforms: linux/amd64,linux/arm64
           push: true
-          # github.ref_name is the tag being built (v1.3.1), so "what is
-          # running?" can be answered by the image itself rather than by
-          # whatever anyone last typed into Ansible.
+          # steps.meta.outputs.version, NOT github.ref_name: ref_name is the git
+          # tag (v1.3.1) while the image tags are semver-normalised (1.3.1), so
+          # baking ref_name made the app report a version that matched no tag it
+          # was published under — and Ansible, which pins 1.3.1, could not check
+          # what it got. One spelling everywhere: the image tag, /api/version
+          # and rental_tracker_version all read 1.3.1. The leading v stays a git
+          # convention and nothing else.
           build-args: |
-            APP_VERSION=${{ github.ref_name }}
+            APP_VERSION=${{ steps.meta.outputs.version }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
