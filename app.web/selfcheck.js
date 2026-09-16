@@ -564,6 +564,14 @@ ok("the menu closes on a click, an outside click and Escape",
      /phoneYearLabel"\)\.textContent = FY \? fyLabel\(FY\)/.test(js)
        && /phoneRentalLabel"\)\.textContent = a \? a\.name : "Rentals"/.test(js)
        && /function renderPhoneBar/.test(js) && /renderPhoneBar\(\);/.test(js));
+  // The bar's year button both names the open year and opens the list of them,
+  // so the row of year pills at the top of the page would be the same choice
+  // offered twice — and the copy at the top is the one you have to scroll back
+  // up to reach.
+  ok("the year is chosen in one place on a phone",
+     /header \.btns, #viewNav, #rentalTools, #yearRow\{display:none\}/.test(flat)
+       && /id="phoneYear"/.test(html) && /id="yearRow"/.test(html),
+     "the row still exists — it is hidden below 700px, not deleted from the page");
   ok("the rentals button says which rental is open",
      /const a = VIEW === "overview" \? null : aptById\(VIEW\);/.test(js)
        && /phoneRental"\)\.classList\.toggle\("on", !!a\)/.test(js),

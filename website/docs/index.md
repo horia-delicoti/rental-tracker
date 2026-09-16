@@ -52,7 +52,9 @@ a page you have scrolled away from. Four buttons:
 | Settings | the display currency, appearance, rates, backups, **+ Rental**, and the open rental's links, note and **Edit** |
 
 The two middle buttons are labelled with what is currently open, so the bar answers "where am I"
-without looking back up the page.
+without looking back up the page. The row of year pills at the top of the page goes with them —
+the same choice offered twice, and the copy at the top is the one you have to scroll back up to
+reach. On a wide screen it is still there.
 
 The [ledger](income-and-expenses.md) is folded to its first few lines there, with **N more** to open
 it — a year of rent is fifty lines, and on a single column that puts the charts a long scroll away.

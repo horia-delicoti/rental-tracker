@@ -548,8 +548,12 @@
          text-align:left;cursor:pointer}
     .prow.on{background:var(--focus);color:var(--profit);font-weight:600}
     .prow .rdot{flex:none}
-    /* Everything the bar now carries leaves the header. */
-    header .btns, #viewNav, #rentalTools{display:none}
+    /* Everything the bar now carries leaves the page. The year row goes with
+       it: the bar's middle button both names the open year and opens the list
+       of years, so a row of pills at the top is the same choice offered twice
+       — and the one at the top is the one you have to scroll back up to. The
+       note still opens below it, from the settings sheet. */
+    header .btns, #viewNav, #rentalTools, #yearRow{display:none}
     /* The two add buttons belong together. Left to wrap on their own, one
        stays on the heading line and the other drops below it, which reads as
        two unrelated controls. A full-width spacer breaks the line before both. */
