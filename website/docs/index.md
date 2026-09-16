@@ -33,12 +33,31 @@ Everything on screen is derived from those three lines. There is no other arithm
 - **Not a tax return.** The tax figure is an estimate from a percentage you set. The optional
   estimator fills UK marginal bands to suggest that percentage; it does not know about your other
   income unless you tell it, and it is not advice.
-- **Not multi-currency bookkeeping.** Every amount is recorded in one base currency. You can *view*
-  the figures in any other currency from the header dropdown, at one current rate — but nothing is
-  stored per-currency and no payment remembers the rate on the day it happened. See
+- **Not multi-currency bookkeeping.** A line remembers the currency it was paid in and the rate it
+  was entered at, and it shows you that as-paid figure — but every total is worked in the one base
+  currency. Changing a rate later never restates a payment that already happened. See
   [Settings](settings.md).
-- **Not fully configurable yet.** Rentals and currencies are yours; the two owner names are still
-  hard-coded — see [Development](development.md).
+
+## On a phone
+
+Under 700px the header's controls and the year row do not fit beside the page, so they move to a bar
+at the bottom of the screen — one thumb's reach from where you are reading, rather than at the top of
+a page you have scrolled away from. Four buttons:
+
+| Button | What it does |
+| --- | --- |
+| Overview | the combined view, every rental at once |
+| the year | says which fiscal year is open; opens the list of years, and **+ Year** |
+| the rental | says which rental is open, or **Rentals** on the Overview; opens the list, and **+ Rental** |
+| Settings | the display currency, appearance, rates, backups, **+ Rental**, and the open rental's links, note and **Edit** |
+
+The two middle buttons are labelled with what is currently open, so the bar answers "where am I"
+without looking back up the page.
+
+The [ledger](income-and-expenses.md) is folded to its first few lines there, with **N more** to open
+it — a year of rent is fifty lines, and on a single column that puts the charts a long scroll away.
+Nothing is removed: the rows are still on the page, the fold is a phone measure only, and it lands on
+a date heading so a day is never shown half.
 
 ## Where to go next
 

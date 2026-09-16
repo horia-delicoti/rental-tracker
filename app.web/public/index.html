@@ -12,6 +12,20 @@
      with no internet. The mark is the roof as the chart: a pitched line over
      three bars — the two halves of what the app does in one glyph. -->
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232F6F62'/%3E%3Cpath d='M13 29 32 15l19 14' fill='none' stroke='%23fff' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='20' y='35' width='6' height='13' rx='2' fill='%235BA89A'/%3E%3Crect x='29' y='31' width='6' height='17' rx='2' fill='%23fff'/%3E%3Crect x='38' y='38' width='6' height='10' rx='2' fill='%23C99A2E'/%3E%3C/svg%3E" />
+<!-- Adding the page to a phone's home screen. iOS ignores an SVG favicon for
+     that and looks for apple-touch-icon, which is why the shortcut came out
+     blank; the PNG is square and NOT pre-rounded, because iOS applies its own
+     mask and a rounded source gets rounded twice. The manifest is what Android
+     reads, and what makes the shortcut open without browser chrome. -->
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-title" content="Ledger" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<!-- Tints the browser's own chrome to match the app, per theme. -->
+<meta name="theme-color" content="#F4F6F3" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#14181A" media="(prefers-color-scheme: dark)" />
 <!-- Chart.js is vendored locally (public/chart.umd.min.js) so the page works
      on a machine with no internet access, and never reaches out to a CDN. -->
 <!-- Runs before any style is parsed, so a dark-mode device never flashes the
@@ -48,6 +62,9 @@
     /* The two ledger add-buttons wear the colour of the lines they create:
        a wash, a border and a text colour derived from --income / --expense. */
     --in-soft:rgba(91,168,154,.12); --in-line:rgba(91,168,154,.38); --in-ink:#2C6A5D;
+    /* A small raised shadow. Not the same value in both themes: 8% black is
+       invisible on a near-black surface, so the dark one leans much harder. */
+    --lift:0 1px 2px rgba(0,0,0,.08);
     --out-soft:rgba(201,154,46,.12); --out-line:rgba(201,154,46,.40); --out-ink:#7E5A11;
     /* A rental's colour is part of the rental, not of the stylesheet — it is
        chosen in its own dialog and stored with it. */
@@ -61,6 +78,11 @@
     --pop:0 12px 30px rgba(31,42,40,.14);            /* the settings menu */
     --danger-bg:#FCEDE8; --danger-line:#E8C4B7; --danger-ink:#8C3A20;
     --info-bg:#F3F7F5; --info-line:#CFE0D9; --info-ink:#39584E;
+    /* The phone bar floats clear of the bottom edge. On a phone with a home
+       indicator the safe-area inset already reserves that space, so only the
+       difference is taken; on one without, 8px is still a margin. Not a theme
+       colour — it is stated once, here, like the type stacks below. */
+    --navgap:max(8px, calc(env(safe-area-inset-bottom, 0px) - 14px));
     --serif:ui-serif,Georgia,"Iowan Old Style","Palatino Linotype",serif;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   }
@@ -78,6 +100,7 @@
     --partner:#4E8377; --muted:#8A9791; --soft:#181D20; --hair:#232B2F;
     --in-soft:rgba(111,191,175,.16); --in-line:rgba(111,191,175,.45); --in-ink:#6FBFAF;
     --out-soft:rgba(217,168,60,.16); --out-line:rgba(217,168,60,.45); --out-ink:#D9A83C;
+    --lift:0 1px 3px rgba(0,0,0,.5);
     --on-accent:#0F1416; --on-ink:#14181A; --on-accent-soft:rgba(15,20,22,.66);
     --dash:#3A464B;
     --trash:rgba(201,112,90,.7);
@@ -95,6 +118,7 @@
       --partner:#4E8377; --muted:#8A9791; --soft:#181D20; --hair:#232B2F;
       --in-soft:rgba(111,191,175,.16); --in-line:rgba(111,191,175,.45); --in-ink:#6FBFAF;
       --out-soft:rgba(217,168,60,.16); --out-line:rgba(217,168,60,.45); --out-ink:#D9A83C;
+      --lift:0 1px 3px rgba(0,0,0,.5);
       --on-accent:#0F1416; --on-ink:#14181A; --on-accent-soft:rgba(15,20,22,.66);
       --dash:#3A464B;
       --trash:rgba(201,112,90,.7);
@@ -302,10 +326,41 @@
      made by the button rather than inside the window. Tinted rather than
      filled: the one filled button on this page is "+ Rental" in the header,
      and two more would leave nothing quiet to read against. */
-  .chip{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;
-       padding:4px 12px;font-size:12px;font-family:inherit;cursor:pointer}
-  .chip:hover{color:var(--ink)}
-  .chip.on{background:var(--soft);border-color:var(--ink);color:var(--ink);font-weight:600}
+  /* ---------- the ledger's filter ----------
+     One button and a popover, in place of three chips: the head had no room
+     for a fourth control, and which-lines-am-I-reading is one question. */
+  .lfilter{position:relative;z-index:30}
+  .fbtn{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;
+       padding:4px 12px;font:inherit;font-size:12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .fbtn:hover{color:var(--ink)}
+  .fbtn.on{background:var(--soft);border-color:var(--ink);color:var(--ink);font-weight:600}
+  /* var(--surface), not a colour: an earlier popover used a token that did not
+     exist, came out transparent, and the rows behind it read straight through. */
+  .fpop{position:absolute;left:0;top:calc(100% + 6px);z-index:40;display:block;min-width:250px;
+       background:var(--surface);border:1px solid var(--line);border-radius:11px;
+       box-shadow:var(--pop);padding:7px}
+  .fph{display:flex;justify-content:space-between;align-items:center;gap:10px;
+       padding:4px 8px 7px;border-bottom:1px solid var(--hair);margin-bottom:6px}
+  .fph b{font-size:12px}
+  .fph button{border:0;background:none;color:var(--in-ink);font:inherit;font-size:11.5px;cursor:pointer;padding:0}
+  .fseg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--soft);
+       padding:3px;border-radius:8px;margin:0 4px 8px}
+  .segb{border:0;background:none;padding:6px;border-radius:6px;font:inherit;font-size:12px;
+       color:var(--muted);cursor:pointer}
+  .segb.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:var(--lift)}
+  .fsub{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
+       color:var(--muted);padding:2px 8px 4px}
+  .fopt{display:flex;align-items:center;gap:9px;width:100%;background:none;border:0;padding:6px 8px;
+       border-radius:7px;font:inherit;font-size:12.5px;color:var(--ink);cursor:pointer;text-align:left}
+  .fopt:hover:not(:disabled){background:var(--soft)}
+  .fopt:disabled{opacity:.45;cursor:default}
+  .fopt .box{width:14px;height:14px;border:1.5px solid var(--line);border-radius:4px;flex:none;
+       display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:var(--on-accent)}
+  .fopt .box.on{background:var(--profit);border-color:var(--profit)}
+  .fopt .fl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fopt .fa{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  .fico{width:20px;height:20px;border-radius:6px;flex:none;display:inline-flex;align-items:center;
+       justify-content:center;font-size:11px;font-style:normal}
   .kbtn{border-radius:8px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer;border:1px solid}
   .kbtn.in{background:var(--in-soft);border-color:var(--in-line);color:var(--in-ink)}
   .kbtn.out{background:var(--out-soft);border-color:var(--out-line);color:var(--out-ink)}
@@ -339,6 +394,24 @@
   .lrow .orig{display:block;font-size:10.5px;line-height:1.3;color:var(--muted)}
   .lrow .pencil{color:var(--muted);font-size:13px;opacity:0}
   .lrow:hover .pencil,.lrow:focus-visible .pencil{opacity:1}
+  /* ---------- the phone's short ledger ----------
+     On a wide screen the ledger sits BESIDE the charts and is capped at their
+     height (see .propmain below). On a phone the columns stack, so nothing
+     caps it, and a year of rent puts "expenses by category" a long scroll
+     down. The list is cut to its first few lines and opened on request.
+     Every row is still in the markup — they are hidden by this media query,
+     not dropped — so the desktop list is untouched and a browser find still
+     turns up a line that happens to be below the fold. */
+  .lmore{display:none}
+  @media(max-width:900px){
+    .ledger.clipped .beyond{display:none}
+    .lmore{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;
+         margin-top:2px;padding:11px 0;border:0;border-top:1px solid var(--hair);
+         background:none;font:inherit;font-size:13px;font-weight:600;color:var(--in-ink);cursor:pointer}
+    .lmore svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;
+         transition:transform .2s ease}
+    .lmore.open svg{transform:rotate(180deg)}
+  }
   /* ---------- breakdown bars ---------- */
   .brow{display:grid;grid-template-columns:26px minmax(0,1fr) auto;gap:0 10px;align-items:center;padding:7px 0}
   .brow .catico{width:26px;height:26px;font-size:13px;border-radius:8px}
@@ -366,6 +439,26 @@
   /* ---------- property page: ledger (2.5 of 4) + monthly chart (1.5 of 4) ---------- */
   .propmain{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
   @media(max-width:900px){.propmain{grid-template-columns:1fr}}
+  /* ---------- the ledger does not set the height of its row ----------
+     A year of rent is fifty lines; the two charts beside it are a fixed
+     height, so letting the list grow left a tall column of rows next to a
+     short column of charts and a lot of nothing under them.
+     The card is absolutely positioned, which means it contributes NOTHING to
+     its column's intrinsic height — so the row is sized by the charts alone,
+     and max-height:100% then caps the card at exactly that. A short ledger
+     still draws short; a long one scrolls inside the card. Below the
+     breakpoint the columns stack, there is nothing to match, and this is all
+     turned off again. */
+  @media(min-width:901px){
+    .propmain{align-items:stretch}
+    .propmain > #properties{position:relative;min-height:340px}
+    .propmain > #properties > .card{position:absolute;top:0;left:0;right:0;max-height:100%;
+         display:flex;flex-direction:column}
+    /* min-height:0 or the flex item refuses to shrink below its content and
+       the scrollbar never appears — the usual flexbox trap. */
+    .propmain > #properties > .card > .ledger{overflow-y:auto;min-height:0;flex:0 1 auto;
+         scrollbar-width:thin}
+  }
   .section-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 8px}
   /* ---------- run-rate projection strip (Overview, current FY only) ---------- */
   .rr{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
@@ -403,6 +496,80 @@
   .addbtn{border:0;background:var(--profit);color:var(--on-accent);border-radius:7px;width:32px;height:32px;font-size:18px;
        cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
   .addbtn.warn{background:var(--expense)}
+  /* ---------- PHONE: the bottom bar ----------
+     Hidden entirely above 700px, where the header has the room for all of it.
+
+     A floating capsule rather than a strip welded to the bottom edge: it reads
+     as part of the page instead of browser chrome, and the paper still shows
+     down both sides.
+
+     FOUR buttons of the same shape, icon over label. Two switch view; two open
+     a picker. What changes is the LABEL — the year button says which year is
+     open, the rentals button says which rental — so the bar answers "where am
+     I" without looking back up the page. One button per rental was tried
+     first: with two it fit, with four it became a sideways scroll inside a
+     bar, which is a list pretending to be navigation. */
+  #phonebar{display:none}
+  .sheet{display:none}
+  @media(max-width:700px){
+    /* The gap under the capsule absorbs the home indicator: on a phone that
+       has one the inset already holds the space, so only the difference is
+       added, and on one that does not there is still a margin. */
+    #phonebar{display:flex;position:fixed;left:14px;right:14px;z-index:45;gap:2px;
+         bottom:var(--navgap);align-items:stretch;
+         background:var(--surface);border:1px solid var(--line);border-radius:26px;
+         padding:7px 6px;box-shadow:var(--pop)}
+    .pbtab{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;
+         padding:6px 2px;border:0;background:none;border-radius:18px;
+         font:inherit;font-size:11px;font-weight:500;letter-spacing:.01em;
+         color:var(--muted);cursor:pointer;transition:background .18s ease,color .18s ease}
+    .pbtab svg{width:22px;height:22px;flex:none}
+    .pbtab span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    /* The open button wears the app's own accent wash — the same pale green as
+       a focus ring. NOT --in-soft: that pair means "income" everywhere else in
+       this file, and a navigation button is not money coming in. */
+    .pbtab.on{background:var(--focus);color:var(--profit);font-weight:600}
+    .pbtab:active{transform:scale(.96)}
+    /* Room for the capsule, its gap and the home indicator. */
+    body{padding-bottom:calc(74px + var(--navgap))}
+    /* ---------- the year / rentals picker ----------
+       Sits directly above the button that opened it, at the bottom of the
+       screen where the thumb already is. No scrim: the bar stays lit and the
+       page stays readable behind it — the point is to change one thing, not to
+       take the screen over. It is still a .modal-bg, so the one observer that
+       locks the body's scroll covers this too. */
+    #pickBg{align-items:flex-end;justify-content:stretch;padding:0;background:none}
+    #pickBox{flex:1;margin:0 14px;background:var(--surface);border:1px solid var(--line);
+         border-radius:18px;box-shadow:var(--pop);padding:7px;max-height:56vh;overflow-y:auto}
+    .pickh{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
+         color:var(--muted);padding:6px 12px 4px}
+    .prow{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;
+         padding:11px 12px;border-radius:12px;font:inherit;font-size:14px;color:var(--ink);
+         text-align:left;cursor:pointer}
+    .prow.on{background:var(--focus);color:var(--profit);font-weight:600}
+    .prow .rdot{flex:none}
+    /* Everything the bar now carries leaves the header. */
+    header .btns, #viewNav, #rentalTools{display:none}
+    /* The two add buttons belong together. Left to wrap on their own, one
+       stays on the heading line and the other drops below it, which reads as
+       two unrelated controls. A full-width spacer breaks the line before both. */
+    .cardhead .grow{flex:1 0 100%;height:0;min-width:0}
+    .sheet{display:block}
+    #sheetBg{align-items:flex-end;padding:0}
+    #sheetBg .modal{max-width:none;border-radius:16px 16px 0 0;border-bottom:0;
+         max-height:86vh;padding-bottom:calc(16px + env(safe-area-inset-bottom, 0px))}
+    @supports (height:100dvh){ #sheetBg .modal{max-height:86dvh} }
+    .srow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 2px}
+    .srow .sl{font-size:13px}
+    .srow select{width:auto}
+    .ssep{height:1px;background:var(--hair);margin:8px 0}
+    /* Styled by the same .rtools rules as the year row's copy — the links are
+       identical markup, so they must not be identical-looking by coincidence. */
+    #sheetRental{align-items:center;gap:8px;flex-wrap:wrap;padding:2px 2px 10px;
+         border-bottom:1px solid var(--hair);margin-bottom:8px;margin-left:0}
+    #sheetRental:empty{display:none}
+  }
+
   /* ---------- profit-split panel ---------- */
   .person{padding:12px 0;border-bottom:1px solid var(--hair)}
   .person:last-child{border-bottom:0}
@@ -421,7 +588,31 @@
   .estbtn:hover{color:var(--ink)}
   .modal-bg{position:fixed;inset:0;background:var(--scrim);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}
   .modal-bg.open{display:flex}
-  .modal{background:var(--surface);border:1px solid var(--line);border-radius:14px;max-width:440px;width:100%;padding:20px;max-height:90vh;overflow:auto}
+  /* With the page behind it still scrollable, a phone scrolls THAT when the
+     keyboard opens, and the dialog looks like it slid away. */
+  body.modal-open{overflow:hidden}
+  .modal{background:var(--surface);border:1px solid var(--line);border-radius:14px;max-width:440px;width:100%;padding:20px;
+       max-height:90vh;overflow:auto;overscroll-behavior:contain}
+  /* dvh, where it exists: on a phone the keyboard shrinks the visible viewport
+     and 90vh then describes a box taller than the screen. */
+  @supports (height:100dvh){ .modal{max-height:90dvh} }
+  /* A dialog on a phone opens at the top rather than centred. Centred, it is
+     the keyboard that decides where it ends up, and it moves as the keyboard
+     opens and closes. */
+  @media(max-width:700px){
+    .modal-bg{align-items:flex-start;padding:12px}
+    .modal{padding:16px}
+  }
+  /* ---------- why a form control is 16px on a touch screen ----------
+     iOS Safari zooms the page whenever a focused input is smaller than 16px,
+     and there is no way to opt out that does not also stop the reader zooming
+     the whole page. The zoom is what shifts a dialog sideways until its labels
+     are off the edge — the dialog never moved, the viewport did. So the
+     controls are 16px wherever the pointer is coarse, and 14px everywhere the
+     zoom cannot happen. */
+  @media(pointer:coarse){
+    input,select,textarea,.amtwrap input,.ratebox input{font-size:16px}
+  }
   .modal h3{font-family:var(--serif);font-size:18px;margin:0 0 4px}
   .modal .sub{font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5}
   .frow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
@@ -833,6 +1024,75 @@
   </div>
 </div>
 
+<!-- ===== PHONE: a bottom bar, its picker, and the settings sheet =====
+     A phone cannot carry the header's row of controls, the year row and a tab
+     per rental as well as the page, so under 700px they move here — one
+     thumb's reach from the bottom of the screen rather than at the top of a
+     page you have scrolled away from.
+
+     Four buttons, all the same shape. Overview and Settings do what they say;
+     the middle two are labelled with what is currently open and each opens a
+     short list to change it. -->
+<nav id="phonebar" aria-label="Sections">
+  <button class="pbtab" data-view="overview">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+    <span>Overview</span>
+  </button>
+  <!-- Both labels are written by renderPhoneBar, from the same FY and the same
+       rental list the rest of the page reads — there is no second copy here
+       that could disagree about which year or which rentals exist. -->
+  <button class="pbtab" id="phoneYear" data-pick="year" aria-haspopup="true" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 2v4M16 2v4"/></svg>
+    <span id="phoneYearLabel">Year</span>
+  </button>
+  <button class="pbtab" id="phoneRental" data-pick="rental" aria-haspopup="true" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5.5 9.9V20h13V9.9"/><path d="M10 20v-5.2h4V20"/></svg>
+    <span id="phoneRentalLabel">Rentals</span>
+  </button>
+  <button class="pbtab" id="phoneSettings" aria-haspopup="dialog" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3.1"/><path d="M19.5 12a7.5 7.5 0 0 0-.13-1.38l2.02-1.55-1.9-3.29-2.38.93a7.5 7.5 0 0 0-2.39-1.38L14.4 2.8h-3.8l-.32 2.53a7.5 7.5 0 0 0-2.39 1.38l-2.38-.93-1.9 3.29 2.02 1.55a7.5 7.5 0 0 0 0 2.76l-2.02 1.55 1.9 3.29 2.38-.93a7.5 7.5 0 0 0 2.39 1.38l.32 2.53h3.8l.32-2.53a7.5 7.5 0 0 0 2.39-1.38l2.38.93 1.9-3.29-2.02-1.55A7.5 7.5 0 0 0 19.5 12z"/></svg>
+    <span>Settings</span>
+  </button>
+</nav>
+
+<!-- The year / rentals picker. A .modal-bg so the body's scroll lock covers it
+     like every other layer, but with no scrim (see #pickBg) — it changes one
+     thing rather than taking the screen over. Filled by openPick. -->
+<div class="modal-bg" id="pickBg">
+  <div id="pickBox" role="dialog" aria-modal="true" aria-label="Choose"></div>
+</div>
+
+<div class="modal-bg" id="sheetBg">
+  <div class="modal sheet">
+    <div class="modalhead"><h3 id="sheetTitle">Settings</h3>
+      <button class="btn" id="sheetClose" aria-label="Close">Close</button></div>
+    <!-- The open rental's own things first: they are about where you are, and
+         everything below is about the app. -->
+    <div id="sheetRental"></div>
+    <div class="srow">
+      <span class="sl">Show amounts in</span>
+      <select id="sheetCur" class="mono" aria-label="Show amounts in"></select>
+    </div>
+    <div class="srow">
+      <span class="sl">Appearance</span>
+      <button class="btn" id="sheetTheme"></button>
+    </div>
+    <div class="srow">
+      <span class="sl">Rates</span>
+      <button class="btn" id="sheetRates">↻ Update from the ECB</button>
+    </div>
+    <div class="ssep"></div>
+    <button class="mrow" id="sheetFx">⚙ Currencies &amp; rates</button>
+    <a class="mrow" href="/api/export" download>⬇ Save a backup</a>
+    <button class="mrow" id="sheetLoad">⬆ Load a backup</button>
+    <button class="mrow" id="sheetRestore">⟲ Restore a snapshot</button>
+    <div class="ssep"></div>
+    <button class="mrow" id="sheetAddRental">+ Rental</button>
+    <div class="mver" data-ver><span class="v"></span>
+      <button class="btn" data-checkupd>Check for updates</button></div>
+  </div>
+</div>
+
 <!-- ===== Adding or editing a person =====
      The people the profit is divided between. Two names used to be written
      into the source, which made them everyone else's owners too. -->
@@ -1001,9 +1261,14 @@ let charts = {};                 // live Chart.js instances, keyed by canvas id 
 let VIEW = "overview";           // "overview" or a rental id — which top-level view is showing
 let DISPLAY = null;              // currency code to SHOW figures in (null = the base, i.e. as stored)
 let NOTE_OPEN = false;           // whether the open rental's note is expanded under the year row
-let LFILTER = "all";             // "all" | "income" | "expenses" — which side of the ledger is shown.
-                                 // A reading mode, never a filter on what is saved: the KPI row above
-                                 // and every chart keep showing the whole year whatever is selected.
+let LFILTER = "all";             // "all" | "income" | "expenses" — which side of the ledger is shown
+let LCATS = [];                  // expense category ids to narrow to; empty means every category
+let LMENU = false;               // whether the filter popover is open
+let LOPEN = false;               // phone only: whether the ledger is opened past its first few lines
+                                 // All four are a reading mode, never a filter on what is saved: the
+                                 // KPI row above and every chart keep showing the whole year whatever
+                                 // is selected here.
+const LEDGER_PEEK = 6;           // lines shown before the phone's "N more" — see .lmore
 
 // The rentals come from the store — there is no list in this file to disagree
 // with it. Every one carries its own colour, links and note.
@@ -1060,6 +1325,9 @@ const EMPTY_LEDGER = {
   all:      "Nothing recorded for this year yet.",
   income:   "No income recorded for this year.",
   expenses: "No expenses recorded for this year.",
+  // A filtered-to-nothing ledger is not an empty year, and saying so would be
+  // a lie about the data rather than about the filter.
+  filtered: "Nothing in this year matches the filter.",
 };
 // A tinted wash behind an icon: the category's own colour, most of the way to
 // transparent, so the glyph sits on something related rather than grey.
@@ -1401,10 +1669,13 @@ function render(){
 // selection pointing at a rate that no longer exists.
 function renderDispCur(){
   const el = document.getElementById("dispCur");
+  const el2 = document.getElementById("sheetCur");
   const codes = currencies().map(c => c.code);
   if(DISPLAY && !codes.includes(DISPLAY)) DISPLAY = null;   // it was deleted while selected
   el.innerHTML = currencies().map(c => `<option value="${esc(c.code)}">${esc(c.code)}</option>`).join("");
   el.value = dispCode();
+  el2.innerHTML = el.innerHTML;
+  el2.value = el.value;
 
   // Say so, plainly, whenever the figures on screen are not the ones on disk.
   const conv = dispCode() !== baseCur();
@@ -1423,6 +1694,22 @@ function renderViewNav(){
        <span class="rdot" style="background:${esc(a.color)}"></span>${esc(a.name)}</button>`).join("");
   document.getElementById("viewNav").innerHTML =
     `<button class="vtab${VIEW === "overview" ? " on" : ""}" data-view="overview">${ICON_CHART} Overview</button>${tabs}`;
+  renderPhoneBar();
+}
+
+// The phone bar carries no list of its own — it carries two LABELS, written
+// from the same FY and the same rentals everything else reads. The list a
+// picker shows is built when it opens, for the same reason: a copy kept in the
+// bar is a copy that can be stale.
+function renderPhoneBar(){
+  const a = VIEW === "overview" ? null : aptById(VIEW);
+  document.getElementById("phoneYearLabel").textContent = FY ? fyLabel(FY) : "Year";
+  // Named when one is open, plural when none is — the button says where you
+  // are, and "Rentals" is the honest answer on the Overview.
+  document.getElementById("phoneRentalLabel").textContent = a ? a.name : "Rentals";
+  document.getElementById("phoneRental").classList.toggle("on", !!a);
+  document.querySelector('#phonebar .pbtab[data-view="overview"]')
+    .classList.toggle("on", VIEW === "overview");
 }
 
 // The open rental's note, links and Edit, at the far end of the year row —
@@ -1430,8 +1717,9 @@ function renderViewNav(){
 function renderRentalTools(){
   const a = VIEW === "overview" ? null : aptById(VIEW);
   const tools = document.getElementById("rentalTools");
+  const sheet = document.getElementById("sheetRental");
   const noteEl = document.getElementById("rentalNote");
-  if(!a){ tools.innerHTML = ""; noteEl.style.display = "none"; return; }
+  if(!a){ tools.innerHTML = ""; sheet.innerHTML = ""; sheet.className = ""; noteEl.style.display = "none"; return; }
 
   const I = {
     airbnb: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21c3.3 0 5.5-2 5.5-4.6 0-2.5-3-6.6-5.5-10.4C9.5 9.8 6.5 13.9 6.5 16.4 6.5 19 8.7 21 12 21z"/></svg>`,
@@ -1446,8 +1734,15 @@ function renderRentalTools(){
   // so a Wi-Fi code can be read rather than squinted at.
   const noteBtn = a.note
     ? `<button class="notebtn" data-act="note" aria-expanded="${NOTE_OPEN}" aria-controls="rentalNote" title="${esc(a.note)}">✎ Note</button>` : "";
-  tools.innerHTML = noteBtn + links + (links ? `<span class="rsep"></span>` : "")
+  const cluster = noteBtn + links + (links ? `<span class="rsep"></span>` : "")
     + `<button class="btn ebtn" data-act="edit-rental">✎ Edit</button>`;
+  tools.innerHTML = cluster;
+  // On a phone the year row has no room for this, so it goes in the sheet
+  // behind More — named, so it is clear which rental's links these are.
+  sheet.className = "rtools";
+  sheet.innerHTML = `<span class="pnamerow">
+      <span class="rdot" style="background:${esc(a.color)}"></span>
+      <b style="font-size:13px">${esc(a.name)}</b></span>` + cluster;
 
   const show = !!a.note && NOTE_OPEN;
   noteEl.style.display = show ? "" : "none";
@@ -1455,7 +1750,7 @@ function renderRentalTools(){
 }
 
 // Switch the top-level view. Any in-progress inline edit belongs to the old view.
-function selectView(v){ VIEW = v; NOTE_OPEN = false; render(); }
+function selectView(v){ VIEW = v; NOTE_OPEN = false; LOPEN = false; render(); }
 
 // Fiscal-year pill tabs + the "+ Year" button. Buttons carry data-* attributes;
 // a single delegated click handler (see bottom) reads them — no inline onclick.
@@ -1512,10 +1807,16 @@ function renderPropertyCard(aptId){
   const rows = [
     ...p.inc.map(r => ({ r, kind: "income" })),
     ...p.exp.map(r => ({ r, kind: "expenses" })),
-  ].filter(x => LFILTER === "all" || LFILTER === x.kind)
-   .sort((x, y) => y.r.date.localeCompare(x.r.date));
+  ].filter(x => {
+    // A category is an expense idea, so picking one excludes income whatever
+    // the kind says. Written as its own rule rather than relying on the two
+    // controls being kept in step — if they ever drift, the list still means
+    // what the label claims.
+    if(LCATS.length) return x.kind === "expenses" && LCATS.includes(x.r.category);
+    return LFILTER === "all" || LFILTER === x.kind;
+  }).sort((x, y) => y.r.date.localeCompare(x.r.date));
 
-  const line = ({ r, kind }) => {
+  const line = ({ r, kind }, extra = "") => {
     const cat = kind === "expenses" ? catOf(r.category) : null;
     const mark = cat || INCOME_MARK;
     const title = esc(r.note) || (cat ? cat.label : "Rent");
@@ -1525,7 +1826,7 @@ function renderPropertyCard(aptId){
     // "160" and "-160" are different facts.
     const sign = kind === "expenses" ? "\u2212" : "+";
     return `
-      <div class="lrow" data-act="edit" data-kind="${kind}" data-id="${r.id}" role="button" tabindex="0"
+      <div class="lrow${extra}" data-act="edit" data-kind="${kind}" data-id="${r.id}" role="button" tabindex="0"
            title="Edit this line">
         <i class="catico" style="background:${tint(mark.color, .16)}">${mark.icon}</i>
         <div class="body"><div class="n">${title}</div><div class="meta">${meta}</div></div>
@@ -1536,29 +1837,97 @@ function renderPropertyCard(aptId){
       </div>`;
   };
 
+  // The phone's cut is counted HERE rather than left to a CSS nth-child,
+  // because the button has to say how many lines it is holding back, and
+  // because the cut lands at a date heading and never inside a day — a
+  // heading standing over nothing reads as data that failed to load.
   const days = [...new Set(rows.map(x => x.r.date))];
-  const list = rows.length
-    ? days.map(d => `<div class="dayhead">${dayLabel(d)}</div>`
-        + rows.filter(x => x.r.date === d).map(line).join("")).join("")
-    : `<div class="empty">${EMPTY_LEDGER[LFILTER]}</div>`;
-
-  // The chips read the list; the two buttons write to it. The kind is settled
-  // by which button is pressed, so the window never has to ask.
-  const chip = (id, label) =>
-    `<button class="chip${LFILTER === id ? " on" : ""}" data-act="filter" data-filter="${id}"
-             aria-pressed="${LFILTER === id}">${label}</button>`;
+  let shown = 0, hidden = 0, parts = [];
+  for(const d of days){
+    const inDay = rows.filter(x => x.r.date === d);
+    const past = shown >= LEDGER_PEEK;
+    if(past) hidden += inDay.length; else shown += inDay.length;
+    const mark = past ? " beyond" : "";
+    parts.push(`<div class="dayhead${mark}">${dayLabel(d)}</div>`,
+               ...inDay.map(x => line(x, mark)));
+  }
+  const list = rows.length ? parts.join("")
+    : `<div class="empty">${LCATS.length ? EMPTY_LEDGER.filtered : EMPTY_LEDGER[LFILTER]}</div>`;
+  // One class on the list is the whole open/closed state; the rows themselves
+  // are the same markup either way.
+  const more = hidden
+    ? `<button class="lmore${LOPEN ? " open" : ""}" data-act="ledger-more" aria-expanded="${LOPEN}">${
+        LOPEN ? "Show less" : `${hidden} more`}<svg viewBox="0 0 24 24" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>`
+    : "";
 
   host.innerHTML = `
     <section class="card">
       <div class="cardhead">
         <h2>${kicon(KICON.flow, "--profit")} Ledger</h2>
-        ${chip("all", "All")}${chip("income", "Income")}${chip("expenses", "Expenses")}
+        ${filterControl(p)}
         <span class="grow"></span>
         <button class="kbtn in"  data-act="new" data-kind="income">+ Income</button>
         <button class="kbtn out" data-act="new" data-kind="expenses">+ Expense</button>
       </div>
-      <div class="ledger">${list}</div>
+      <div class="ledger${LOPEN ? "" : " clipped"}">${list}</div>
+      ${more}
     </section>`;
+}
+
+// One control, where three chips used to be. It had to REPLACE them rather than
+// sit beside them: the head already carried a title, three chips and two
+// buttons, and a fourth control wrapped "+ Expense" onto a line of its own.
+// Reading the ledger is one question — which lines — so it is one answer.
+const FILTER_LABEL = () => {
+  if(LCATS.length === 1){
+    const c = catOf(LCATS[0]);
+    return `<i class="fico">${c.icon}</i> ${esc(c.label)}`;
+  }
+  if(LCATS.length) return `Expenses · ${LCATS.length} categories`;
+  return {all: "All lines", income: "Income", expenses: "Expenses"}[LFILTER];
+};
+
+function filterControl(p){
+  const on = LFILTER !== "all" || LCATS.length;
+  const btn = `<button class="fbtn${on ? " on" : ""}" data-act="filter-open"
+      aria-expanded="${LMENU}" aria-haspopup="true">${FILTER_LABEL()} <span aria-hidden="true">▾</span></button>`;
+  if(!LMENU) return `<span class="lfilter">${btn}</span>`;
+
+  // This year's spend per category, from the rows the filter has NOT been
+  // applied to — a menu whose figures moved as you used it would be useless
+  // for deciding what to look at next.
+  const spent = {};
+  p.exp.forEach(r => { spent[r.category] = (spent[r.category] || 0) + r.amountBase; });
+
+  const seg = [["all","All"],["income","Income"],["expenses","Expenses"]].map(([k,t]) =>
+    `<button class="segb${LFILTER === k && !LCATS.length ? " on" : ""}" data-act="filter-kind" data-kind="${k}"
+             aria-pressed="${LFILTER === k && !LCATS.length}">${t}</button>`).join("");
+
+  // Income has no categories, so offering them while Income is selected would
+  // be offering a filter that can only empty the list.
+  const off = LFILTER === "income" && !LCATS.length;
+  const cats = CATS.map(ct => {
+    const picked = LCATS.includes(ct.id);
+    return `<button class="fopt" data-act="filter-cat" data-cat="${ct.id}" role="menuitemcheckbox"
+                    aria-checked="${picked}"${off ? " disabled" : ""}>
+        <span class="box${picked ? " on" : ""}" aria-hidden="true">${picked ? "\u2713" : ""}</span>
+        <i class="fico" style="background:${tint(ct.color,.16)}">${ct.icon}</i>
+        <span class="fl">${esc(ct.label)}</span>
+        <span class="fa">${spent[ct.id] ? money0(spent[ct.id]) : "—"}</span>
+      </button>`;
+  }).join("");
+
+  return `<span class="lfilter">${btn}
+    <span class="fpop" role="menu">
+      <span class="fph"><b>Show</b>${on
+        ? `<button data-act="filter-clear">Clear</button>`
+        : `<span class="muted" style="font-size:11.5px">everything</span>`}</span>
+      <span class="fseg">${seg}</span>
+      <span class="fsub"${off ? ' style="opacity:.45"' : ""}>Expense categories</span>
+      ${cats}
+    </span>
+  </span>`;
 }
 
 // Each person's share, tax % and take-home. The list comes from the store, so
@@ -1999,7 +2368,7 @@ async function saveRates(idPrefix){
 
 // Switch the selected fiscal year (no server call — just re-render).
 // Any in-progress inline edit is abandoned — its row belongs to the old year.
-function selectFY(fy){ FY = fy; render(); }
+function selectFY(fy){ FY = fy; LOPEN = false; render(); }
 
 // ---- Snapshot restore (the server's rolling backups, see /api/backups) ----
 // Fetch the snapshot list and show the modal.
@@ -2515,6 +2884,103 @@ document.getElementById("viewNav").addEventListener("click", e => {
   if(b.dataset.view) selectView(b.dataset.view);
 });
 
+// ---- the phone bar and its sheet --------------------------------------------
+// Every row here calls the function the header's own control calls. The
+// controls are duplicated because a phone cannot show the header's; the
+// BEHAVIOUR is not, so the two can never drift apart.
+document.getElementById("phonebar").addEventListener("click", e => {
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.view) selectView(b.dataset.view);
+  else if(b.dataset.pick) openPick(b.dataset.pick);
+});
+
+// ---- the year / rentals picker ----------------------------------------------
+// Both lists are built here, when the button is pressed, from allFYs() and
+// apts() — the same two functions the header's own tabs are built from. The
+// rows below call selectFY / selectView / addYear / openRental, so pressing
+// one on a phone does exactly what pressing the header's tab does on a desk.
+let PICK = null;                 // "year" | "rental" | null — which picker is open
+function openPick(kind){
+  const a = VIEW === "overview" ? null : aptById(VIEW);
+  const rows = kind === "year"
+    ? `<div class="pickh">Fiscal year</div>`
+      + allFYs().map(fy => `<button class="prow${fy === FY ? " on" : ""}" data-fy="${fy}">${fyLabel(fy)}</button>`).join("")
+      + `<button class="prow" data-act="add-year">+ Year</button>`
+    : `<div class="pickh">Rentals</div>`
+      + `<button class="prow${!a ? " on" : ""}" data-view="overview">Overview — all rentals</button>`
+      + apts().map(x => `<button class="prow${VIEW === x.id ? " on" : ""}" data-view="${x.id}">
+           <span class="rdot" style="background:${esc(x.color)}"></span>${esc(x.name)}</button>`).join("")
+      + `<button class="prow" data-act="add-rental">+ Rental</button>`;
+  const box = document.getElementById("pickBox");
+  box.innerHTML = rows;
+  box.setAttribute("aria-label", kind === "year" ? "Choose a fiscal year" : "Choose a rental");
+  document.getElementById("pickBg").classList.add("open");
+  // Sat directly above the button that opened it: measured rather than guessed,
+  // because the capsule's height follows the label's own line box.
+  const bar = document.getElementById("phonebar").getBoundingClientRect();
+  box.style.marginBottom = (window.innerHeight - bar.top + 8) + "px";
+  PICK = kind;
+  document.getElementById(kind === "year" ? "phoneYear" : "phoneRental")
+    .setAttribute("aria-expanded", true);
+}
+function closePick(){
+  document.getElementById("pickBg").classList.remove("open");
+  if(PICK) document.getElementById(PICK === "year" ? "phoneYear" : "phoneRental")
+    .setAttribute("aria-expanded", false);
+  PICK = null;
+}
+document.getElementById("pickBg").addEventListener("click", e => {
+  if(e.target.id === "pickBg"){ closePick(); return; }
+  const b = e.target.closest("button"); if(!b) return;
+  closePick();
+  if(b.dataset.fy) selectFY(b.dataset.fy);
+  else if(b.dataset.view) selectView(b.dataset.view);
+  else if(b.dataset.act === "add-year") addYear();
+  else if(b.dataset.act === "add-rental") openRental(null);
+});
+
+const openSheet = () => {
+  document.getElementById("sheetBg").classList.add("open");
+  document.getElementById("phoneSettings").setAttribute("aria-expanded", true);
+  drawSheetTheme();
+};
+const closeSheet = () => {
+  document.getElementById("sheetBg").classList.remove("open");
+  document.getElementById("phoneSettings").setAttribute("aria-expanded", false);
+};
+// The appearance row says where you are and where the next press goes, same as
+// the header button — it just has the room to say it in words.
+function drawSheetTheme(){
+  const i = Math.max(0, THEME_MODES.findIndex(([m]) => m === themeMode()));
+  const [, label, icon] = THEME_MODES[i];
+  document.getElementById("sheetTheme").innerHTML =
+    `<svg class="tico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg> ${label}`;
+}
+document.getElementById("phoneSettings").addEventListener("click", openSheet);
+document.getElementById("sheetClose").addEventListener("click", closeSheet);
+document.getElementById("sheetBg").addEventListener("click", e => { if(e.target.id === "sheetBg") closeSheet(); });
+document.getElementById("sheetTheme").addEventListener("click", () => { cycleTheme(); drawSheetTheme(); });
+document.getElementById("sheetRates").addEventListener("click", refreshRates);
+document.getElementById("sheetCur").addEventListener("change", e => {
+  DISPLAY = e.target.value === baseCur() ? null : e.target.value;
+  render();
+});
+// These close the sheet first: each opens a dialog, and a dialog on top of a
+// sheet is two layers of scrim and no way to tell which Escape closes.
+[["sheetFx", () => openFx()],
+ ["sheetRestore", () => openRestore()],
+ ["sheetAddRental", () => openRental(null)],
+ ["sheetLoad", () => document.getElementById("fileInput").click()],
+].forEach(([id, fn]) => document.getElementById(id).addEventListener("click", () => { closeSheet(); fn(); }));
+// The rental's own links and Edit live in the sheet on a phone.
+document.getElementById("sheetRental").addEventListener("click", e => {
+  if(e.target.closest("a")) { closeSheet(); return; }
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.act === "edit-rental"){ closeSheet(); openRental(VIEW); }
+  if(b.dataset.act === "note"){ NOTE_OPEN = !NOTE_OPEN; closeSheet(); render(); }
+});
+
 // The year row's right-hand cluster. A link is a link — it opens, and nothing
 // else happens; the note toggles; Edit opens the rental it belongs to.
 document.getElementById("rentalTools").addEventListener("click", e => {
@@ -2539,7 +3005,25 @@ const ledgerAction = el => {
   if(!t) return;
   if(t.dataset.act === "new") openLine(t.dataset.kind, null);
   else if(t.dataset.act === "edit") openLine(t.dataset.kind, t.dataset.id);
-  else if(t.dataset.act === "filter"){ LFILTER = t.dataset.filter; renderPropertyCard(VIEW); }
+  else if(t.dataset.act === "filter-open"){ LMENU = !LMENU; renderPropertyCard(VIEW); }
+  // Phone only: open the list past its first few lines, or fold it back.
+  else if(t.dataset.act === "ledger-more"){ LOPEN = !LOPEN; renderPropertyCard(VIEW); }
+  else if(t.dataset.act === "filter-kind"){
+    // Choosing a side clears any categories: "Income" and "only Maintenance"
+    // cannot both be true, and silently keeping one would make the button lie.
+    // A different set of lines is a different list, so it starts folded again
+    // — otherwise "All lines" after a one-category view opens at full length.
+    LFILTER = t.dataset.kind; LCATS = []; LOPEN = false; renderPropertyCard(VIEW);
+  }
+  else if(t.dataset.act === "filter-cat"){
+    const id = t.dataset.cat;
+    LCATS = LCATS.includes(id) ? LCATS.filter(x => x !== id) : LCATS.concat(id);
+    // A category is an expense idea, so the side follows it rather than being
+    // left saying something the list no longer does.
+    if(LCATS.length) LFILTER = "expenses";
+    LOPEN = false; renderPropertyCard(VIEW);
+  }
+  else if(t.dataset.act === "filter-clear"){ LFILTER = "all"; LCATS = []; LOPEN = false; renderPropertyCard(VIEW); }
 };
 // Delegated on the whole view, so both columns are covered by one listener
 // and neither re-render can drop it.
@@ -2633,6 +3117,26 @@ document.getElementById("rDelCancel").addEventListener("click", closeRentalDelet
 document.getElementById("rDelGo").addEventListener("click", confirmRentalDelete);
 document.getElementById("rDelBg").addEventListener("click", e => { if(e.target.id === "rDelBg") closeRentalDelete(); });
 
+// ---- the page must not scroll behind a dialog --------------------------------
+// Worked out from the DOM rather than set by whoever opened the thing: there
+// are nine dialogs and a dozen ways in and out of them, and the one that forgot
+// to call it would be the one that moved the window on a phone.
+const lockScroll = () => document.body.classList.toggle(
+  "modal-open", !!document.querySelector(".modal-bg.open"));
+new MutationObserver(lockScroll).observe(document.body, {
+  subtree: true, attributes: true, attributeFilter: ["class"],
+});
+
+// The filter popover closes on a click anywhere else and on Escape. Both are
+// on the document because the menu is re-rendered on every choice, so a
+// listener bound to it would not survive the first one.
+document.addEventListener("click", e => {
+  if(LMENU && !e.target.closest(".lfilter")){ LMENU = false; renderPropertyCard(VIEW); }
+});
+document.addEventListener("keydown", e => {
+  if(e.key === "Escape" && LMENU){ LMENU = false; renderPropertyCard(VIEW); }
+});
+
 // --- People -----------------------------------------------------------------
 document.getElementById("pColors").addEventListener("click", e => {
   const b = e.target.closest("[data-pcolor]");
@@ -2667,7 +3171,8 @@ document.addEventListener("click", e => {
   if(!setMenu.contains(e.target) && e.target !== setMenuBtn) setMenu.classList.remove("open");
 });
 document.addEventListener("keydown", e => {
-  if(e.key === "Escape"){ setMenu.classList.remove("open"); closeFx(); closeRental(); closeRentalDelete(); closeLine(); }
+  if(e.key === "Escape"){ setMenu.classList.remove("open"); closeFx(); closeRental(); closeRentalDelete(); closeLine();
+    closePick(); closeSheet(); }
 });
 
 // --- Currency rate dialog ---------------------------------------------------

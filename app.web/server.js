@@ -384,6 +384,10 @@ const MIME = {
   ".json": "application/json",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
+  // The home-screen icon has to be a PNG: iOS ignores an SVG favicon when you
+  // "Add to Home Screen", which is why the shortcut came out blank.
+  ".png": "image/png",
+  ".webmanifest": "application/manifest+json",
 };
 
 // --- Static file serving (the SPA + vendored Chart.js) ---

@@ -85,10 +85,15 @@ error. Run it after any edit to `server.js` or `index.html`.
 4d2. **Every title carries a drawn icon from `KICON`.** Headings JS rewrites go through
    `setTitle` (which re-applies the icon); headings it never rewrites carry `data-icon` and are
    stamped once by `paintStaticTitles`. A bare `.textContent =` on a title drops its icon.
-4d. **The ledger is one list; the chips are a reading mode.** Income and expenses render from one
-   array in date order, told apart by sign, colour and icon. `LFILTER` only ever narrows what
-   `renderPropertyCard` draws — it never reaches the server, and no KPI, chart or tax figure may
-   move when a chip is pressed. The add button carries the kind, so the line window never asks.
+4d. **The ledger is one list; the filter is a reading mode.** Income and expenses render from one
+   array in date order, told apart by sign, colour and icon. `LFILTER` (side) and `LCATS`
+   (categories) only ever narrow what `renderPropertyCard` draws — neither reaches the server, and
+   no KPI, chart or tax figure may move when either changes. A category filter excludes income in
+   the row filter itself, not by trusting the two controls to stay in step. The add button carries
+   the kind, so the line window never asks.
+4e. **The ledger does not set the height of its row.** Its card is absolutely positioned, so it
+   contributes nothing to the row; the charts beside it size the row and `max-height:100%` caps the
+   card. Below 901px the columns stack and the cap is off.
 5. **Nothing sums raw rows without scoping them.** Only the calculation layer plus the two grouping
    charts (`renderCatChart`, `renderMonthlyChart`) read `DATA.income` / `DATA.expenses` directly,
    and those two must filter by both the selected fiscal year and the selected property.
@@ -131,11 +136,12 @@ error. Run it after any edit to `server.js` or `index.html`.
   never on boot. It writes `settings.fxUsdGbp` and nothing else, and writes nothing on failure. Do
   not add background network calls.
 
-## Known hard-coding (the next piece of work)
+## Nothing personal is hard-coded
 
-Property names, owner names and the currency are hard-coded across `server.js` and `index.html`.
-Making them configurable is a deliberate, separate change — the self check already asserts the
-places that must stay in agreement, which is what makes that change safe to attempt.
+Rentals, the people the profit is split between, and the currencies are all stored data, added and
+removed in the app; a fresh install has none of each and says so. The self check bans a word list
+(one household's rental and owner names) from the tracked tree — if one reappears in a fixture or a
+screenshot, `npm run selfcheck` fails. Keep it that way: this repo is public.
 
 ## Data
 

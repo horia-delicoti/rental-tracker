@@ -17,9 +17,39 @@ Three things tell the two kinds apart, and a line needs all three to be readable
 **sign** (`+` or `−`), the **colour** (teal for income, gold for expenses) and the **icon** —
 💵 for income, the category's own for an expense.
 
-The chips beside the heading — **All · Income · Expenses** — read one side of the list without
-breaking it into two. They are a reading mode and nothing more: the figures above the ledger, the
-charts beside it and the tax are the whole year whichever chip is on.
+The list is capped to the height of the charts beside it and scrolls inside its own card — a year
+of rent is fifty lines, and letting it grow left a tall column of rows next to a short column of
+charts. A short ledger still draws short.
+
+On a phone the charts sit *under* the list rather than beside it, so there is no height to match
+and nothing to scroll inside. The list is folded to its first few lines instead, with **N more** at
+the foot of the card to open it and **Show less** to fold it back. The button counts what it is
+holding, and the fold lands on a date heading — a day is never shown half. Nothing is removed: the
+rows are all still on the page, so a browser find turns up a line below the fold, and a new list —
+another year, another rental, a different filter — starts folded again.
+
+## Reading one part of it
+
+The control beside the heading narrows what the list shows. It is one button, and it says what is
+on — *All lines*, *Income*, *🔧 Maintenance*, *Expenses · 2 categories*. Opening it gives:
+
+- **All / Income / Expenses** — which side of the ledger;
+- **Expense categories** — any number of them, each with what it came to this year, so the menu
+  also answers "where did the money go" before you pick anything.
+
+Two rules keep the button honest about the list:
+
+- picking a **category** narrows to expenses, because a category is an expense idea — *Income* and
+  *only Maintenance* cannot both be true;
+- picking a **side** clears the categories.
+
+Categories are greyed out while *Income* is selected, since income has none and offering them would
+offer a filter that can only empty the list. The figures in the menu are the whole year, not the
+filtered view, so they do not move as you use it.
+
+This is a reading mode and nothing more: the figures above the ledger, the charts beside it and the
+tax are the whole year whatever the filter says. And a list filtered down to nothing says the filter
+matched nothing, rather than claiming the year is empty.
 
 Beside the ledger sit the two things that summarise it: the category breakdown, and this rental's
 monthly cash flow.

@@ -506,7 +506,8 @@ ok("there is nothing there on the Overview",
 ok("the note can be read, not only hovered",
    /data-act="note"/.test(js) && /NOTE_OPEN = !NOTE_OPEN/.test(js) && /id="rentalNote"/.test(html),
    "a Wi-Fi code in a tooltip is a Wi-Fi code you squint at");
-ok("switching rental closes the last one's note", /NOTE_OPEN = false; render\(\)/.test(js));
+ok("switching rental closes the last one's note",
+   /NOTE_OPEN = false;[^\n]*render\(\)/.test(js));
 ok("a link in the tools does nothing but open", /if\(e\.target\.closest\("a"\)\) return;/.test(js));
 ok("the header names the app, not the current view",
    /<h1 class="brand">/.test(html) && !/h1title/.test(html),
@@ -542,6 +543,56 @@ ok("the file picker sits outside the menu", /id="fileInput"/.test(html) && !/id=
    "the menu closes on any click inside it, and a picker removed mid-click never opens");
 ok("the menu closes on a click, an outside click and Escape",
    /setMenu\.classList\.remove\("open"\)/.test(js) && /key === "Escape"/.test(js));
+
+// --- the phone's bottom bar ------------------------------------------------
+// Four buttons of one shape: Overview and Settings do what they say, and the
+// middle two are LABELLED with what is open and each opens a short list to
+// change it. One button per rental came first; with two it fit, with four it
+// was a sideways scroll inside a bar, which is a list pretending to be
+// navigation.
+{
+  const bar = html.slice(html.indexOf('<nav id="phonebar"'), html.indexOf("</nav>", html.indexOf('<nav id="phonebar"')));
+  const tabs = (bar.match(/class="pbtab"/g) || []).length;
+  ok("the bar carries four buttons and no list", tabs === 4 && !/pbscroll/.test(html),
+     "found " + tabs + " — a bar that grows with the data is a bar that will not fit");
+  ok("the bar's icons are drawn, not typed", (bar.match(/<svg /g) || []).length === 4,
+     "an emoji is a different glyph on every phone and cannot take the colour of its label");
+  // The two labels are written from the same FY and the same rentals the rest
+  // of the page reads. A copy kept in the bar is a copy that can go stale —
+  // which is the bug that hard-coded rentals used to have.
+  ok("the bar's labels are written from the page's own state",
+     /phoneYearLabel"\)\.textContent = FY \? fyLabel\(FY\)/.test(js)
+       && /phoneRentalLabel"\)\.textContent = a \? a\.name : "Rentals"/.test(js)
+       && /function renderPhoneBar/.test(js) && /renderPhoneBar\(\);/.test(js));
+  ok("the rentals button says which rental is open",
+     /const a = VIEW === "overview" \? null : aptById\(VIEW\);/.test(js)
+       && /phoneRental"\)\.classList\.toggle\("on", !!a\)/.test(js),
+     "a bar that always says \"Rentals\" does not answer where you are");
+}
+{
+  // Both lists are built when the picker opens, from allFYs() and apts() — the
+  // same two functions the header's tabs are built from — and each row calls
+  // the function the header's own control calls. The controls are duplicated
+  // because a phone cannot show the header's; the BEHAVIOUR is not.
+  const pick = js.slice(js.indexOf("function openPick"), js.indexOf("const openSheet"));
+  ok("the picker builds its lists from the same functions the header does",
+     /allFYs\(\)\.map/.test(pick) && /apts\(\)\.map/.test(pick));
+  ok("a picker row does what the header's tab does",
+     /selectFY\(b\.dataset\.fy\)/.test(pick) && /selectView\(b\.dataset\.view\)/.test(pick)
+       && /addYear\(\)/.test(pick) && /openRental\(null\)/.test(pick),
+     "a second copy of what a tab means is a second thing to keep in step");
+  ok("the picker closes before it acts", pick.indexOf("closePick();") < pick.indexOf("b.dataset.fy)"),
+     "a list still open over the page it just changed reads as a press that did nothing");
+  ok("the picker closes on Escape and on a press outside",
+     /closePick\(\); closeSheet\(\);/.test(js) && /e\.target\.id === "pickBg"/.test(js));
+  ok("the picker locks the page behind it like every other layer",
+     /<div class="modal-bg" id="pickBg">/.test(html),
+     "the one observer that sets body.modal-open watches .modal-bg.open");
+}
+ok("the settings button opens the settings sheet",
+   /getElementById\("phoneSettings"\)\.addEventListener\("click", openSheet\)/.test(js)
+     && /<h3 id="sheetTitle">Settings<\/h3>/.test(html) && !/phoneMore/.test(html + js),
+   "three dots say a menu exists; a cog says what is in it");
 
 // --- currencies and rates -------------------------------------------------
 // The estimator used to keep the USD→GBP rate in localStorage, per device. Two
@@ -625,9 +676,16 @@ ok("the page itself calls nothing off-machine",
 const autoCalls = js.split("\n").filter((l) => /refreshRates\(/.test(l) && !/^(async )?function refreshRates/.test(l.trim()));
 ok("the refresh happens on a press, never on a timer or on boot", autoCalls.length === 0,
    autoCalls.map((l) => l.trim()).join(" | ") || "declared once, never called directly");
-ok("both rate buttons run the same refresh",
-   (js.match(/addEventListener\("click", refreshRates\)/g) || []).length === 2,
-   "the header button and the one in the dialog");
+{
+  // Every way of asking for rates runs the SAME function, handed over by
+  // reference — a second copy of "fetch, then decide what to write" is how one
+  // entry point ends up writing on a failure that the other refuses.
+  const wired = js.split("\n").filter((l) => /addEventListener\("click", refreshRates\)/.test(l))
+    .map((l) => (l.match(/getElementById\("(\w+)"\)/) || [])[1]).filter(Boolean).sort();
+  ok("every rate button runs the same refresh",
+     JSON.stringify(wired) === JSON.stringify(["fxRefresh", "ratesBtn", "sheetRates"]),
+     "the header, the dialog and the phone sheet — found: " + (wired.join(", ") || "none"));
+}
 const ratesRoute = srvSrc.slice(srvSrc.indexOf('url === "/api/rates/refresh"'),
                                 srvSrc.indexOf("// DELETE /api/income/:id"));
 ok("a hung rate service cannot hang the button", /AbortController/.test(ratesRoute) && /abort\(\), 10000/.test(ratesRoute));
@@ -670,7 +728,9 @@ ok("the header's always-there controls are flush with the background",
     [...(src || "").matchAll(/(--[a-z-]+)\s*:\s*([^;]+);/g)].forEach((m) => { out[m[1]] = m[2].trim(); });
     return out;
   };
-  const FONTS = ["--serif", "--mono"];                 // the same in any light
+  // Stated once in :root because they do not change with the light: the type
+  // stacks, and the gap the phone bar floats above the bottom edge by.
+  const FONTS = ["--serif", "--mono", "--navgap"];
   const light = tokens(block("  :root{"));
   const dark = tokens(block(':root[data-theme="dark"]{'));
   const auto = tokens(block(':root:not([data-theme="light"]){'));
@@ -836,7 +896,32 @@ ok("the charts convert their labels too", /const axisMoney/.test(js)
 // The ledger is grouped by day, and the month a fiscal year is worked out from
 // is DERIVED from that date rather than typed beside it.
 ok("lines are grouped under their date",
-   /class="dayhead"/.test(js) && /const dayLabel/.test(js));
+   /class="dayhead\$\{mark\}"/.test(js) && /const dayLabel/.test(js));
+// ---- the phone folds the ledger ------------------------------------------
+// On a phone the columns stack, so nothing caps the list and a year of rent
+// pushes the charts off the bottom of the screen. It is folded to its first
+// few lines instead — but folded, not truncated: every row stays in the
+// markup and a media query hides it, so the desktop list is the whole list
+// and a browser find still turns up a line below the fold.
+ok("folding hides rows, it does not drop them",
+   /\.ledger\.clipped \.beyond\{display:none\}/.test(flat)
+     && !/\.slice\(0, LEDGER_PEEK\)/.test(js),
+   "a list that renders only six rows is six rows to find, to print and to read out");
+ok("the fold is a phone measure only",
+   /\.lmore\{display:none\}/.test(flat) && /@media\(max-width:900px\)\{\s*\.ledger\.clipped/.test(flat),
+   "beside the charts the card is already capped and scrolls — see .propmain");
+ok("the fold lands on a date heading, never inside a day",
+   /const past = shown >= LEDGER_PEEK;/.test(js)
+     && /const mark = past \? " beyond" : "";/.test(js)
+     && /parts\.push\(`<div class="dayhead\$\{mark\}"/.test(js)
+     && /inDay\.map\(x => line\(x, mark\)\)/.test(js),
+   "one mark for the heading and its own rows, so a heading can never stand over nothing");
+ok("the button says how many lines it is holding back",
+   /\$\{hidden\} more/.test(js) && /hidden \+= inDay\.length/.test(js),
+   "\"more\" on its own does not say whether it is two lines or fifty");
+ok("a new list starts folded",
+   (js.match(/LOPEN = false/g) || []).length >= 5,
+   "changing year, rental or filter is a different list — it must not open at full length");
 ok("the month comes from the date, never from a second field",
    (srvSrc.match(/month: b\.date\.slice\(0, 7\)/g) || []).length === 2
      && /rec\.month = b\.date\.slice\(0, 7\)/.test(srvSrc),
@@ -947,15 +1032,62 @@ ok("income has one icon, declared with the categories",
      && /const mark = cat \|\| INCOME_MARK;/.test(js),
    "or the ledger and the breakdown can disagree about what income looks like");
 
-// The chips are a reading mode. Filtering the list must never reach the totals:
-// the KPI row, the charts and the tax are the year, whatever is on screen.
-ok("the chips filter the list and nothing else",
-   /LFILTER = t\.dataset\.filter; renderPropertyCard\(VIEW\)/.test(js)
-     && /\.filter\(x => LFILTER === "all" \|\| LFILTER === x\.kind\)/.test(js),
-   "only the ledger re-renders, so no total can move with a chip");
+// The filter is a reading mode. It must never reach the totals: the KPI row,
+// the charts and the tax are the year, whatever is on screen.
+ok("the filter changes the list and nothing else",
+   /renderPropertyCard\(VIEW\); \}\s*$/m.test(js.split("\n").filter((l) => /LFILTER =|LCATS =/.test(l)).join("\n") + "\n")
+     || /LFILTER = t\.dataset\.kind; LCATS = \[\]; renderPropertyCard\(VIEW\)/.test(js),
+   "only the ledger re-renders, so no total can move with it");
+ok("nothing but renderPropertyCard is called when the filter changes",
+   !/(LFILTER|LCATS|LMENU) =[^;]*;\s*(load|render)\(\)/.test(js),
+   "a load() here would refetch, and a render() would redraw the charts");
 ok("the filter never reaches the server",
-   !/LFILTER/.test(srvSrc) && !/filter=/.test(js.match(/fetch\("\/api[^)]*\)/g)?.join("") || ""),
+   !/LFILTER|LCATS/.test(srvSrc) && !/filter=/.test(js.match(/fetch\("\/api[^)]*\)/g)?.join("") || ""),
    "it is a view, like the display currency");
+
+// ------------------------------------------------- one control, not four
+// The head already carried a title, three chips and two buttons; a fourth
+// control wrapped "+ Expense" onto a line of its own. The category filter
+// therefore REPLACED the chips rather than joining them.
+ok("the kind chips are gone, replaced by one control",
+   !/class="chip/.test(js) && !/\.chip\{/.test(flat)
+     && /data-act="filter-open"/.test(js) && /class="fpop"/.test(js),
+   "one button and a popover where three chips used to be");
+ok("the filter button says what is on",
+   /const FILTER_LABEL = \(\) =>/.test(js)
+     && /All lines/.test(js) && /categories`/.test(js),
+   "a control whose label does not change is a control you cannot read");
+// A category is an expense idea. If the two controls ever disagreed, the list
+// still has to mean what the button claims — so the row filter says so itself
+// rather than trusting the handlers to keep them in step.
+ok("a category filter excludes income on its own",
+   /if\(LCATS\.length\) return x\.kind === "expenses" && LCATS\.includes\(x\.r\.category\);/.test(js));
+ok("picking a side clears the categories, and picking a category sets the side",
+   /LFILTER = t\.dataset\.kind; LCATS = \[\];/.test(js)
+     && /if\(LCATS\.length\) LFILTER = "expenses";/.test(js),
+   "or the button reads Income while the list shows only Maintenance");
+ok("categories are disabled while Income is selected",
+   /const off = LFILTER === "income" && !LCATS\.length;/.test(js) && /\$\{off \? " disabled" : ""\}/.test(js),
+   "income has no categories, so offering them offers a filter that can only empty the list");
+ok("the menu's figures are the unfiltered year",
+   /p\.exp\.forEach\(r => \{ spent\[r\.category\] =/.test(js),
+   "a menu whose amounts moved as you used it could not tell you what to look at next");
+ok("the menu closes on an outside click and on Escape",
+   /if\(LMENU && !e\.target\.closest\("\.lfilter"\)\)/.test(js)
+     && /e\.key === "Escape" && LMENU/.test(js));
+ok("a filtered-empty ledger does not claim the year is empty",
+   /filtered: "Nothing in this year matches the filter\."/.test(js)
+     && /LCATS\.length \? EMPTY_LEDGER\.filtered : EMPTY_LEDGER\[LFILTER\]/.test(js));
+
+// ------------------------------------------- the ledger is not the row height
+// A year of rent is fifty lines; the charts beside it are a fixed height.
+ok("the ledger scrolls instead of setting the height of its row",
+   /\.propmain > #properties > \.card\{position:absolute;top:0;left:0;right:0;max-height:100%/.test(flat)
+     && /\.propmain > #properties > \.card > \.ledger\{overflow-y:auto;min-height:0/.test(flat),
+   "absolute, so it adds nothing to the row; max-height, so the charts cap it");
+ok("the cap is off where the columns stack",
+   /@media\(min-width:901px\)\{\.propmain\{align-items:stretch\}/.test(flat),
+   "below the breakpoint there is nothing to match, and a capped card would just clip");
 ok("an empty ledger says why it is empty",
    /const EMPTY_LEDGER = \{[\s\S]*?all:[\s\S]*?income:[\s\S]*?expenses:[\s\S]*?\};/.test(js)
      && /EMPTY_LEDGER\[LFILTER\]/.test(js),
