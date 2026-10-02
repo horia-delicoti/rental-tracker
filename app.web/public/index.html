@@ -2316,7 +2316,10 @@ function openLine(kind, id){
   document.getElementById("liDate").value = rec ? rec.date : defaultDateFor(FY);
   document.getElementById("liNote").value = rec ? (rec.note || "") : "";
   document.getElementById("liAmt").value  = rec ? rec.amount : "";
-  document.getElementById("liFx").value   = rec ? rec.fx : rateOf(baseCur());
+  // A new line takes the stored rate of the currency it opened in — which is
+  // the default for this kind, not necessarily the base. Reading the base's
+  // rate here put 1 under an MXN line until the dropdown was touched.
+  document.getElementById("liFx").value   = rec ? rec.fx : rateOf(document.getElementById("liCur").value);
   document.getElementById("liDel").style.display = rec ? "" : "none";
   lineError("");
   drawLineFx();

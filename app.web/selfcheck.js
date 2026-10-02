@@ -1152,6 +1152,10 @@ ok("a new line opens in the default for its kind",
      && /const defaultCurFor = kind =>/.test(js)
      && /liCur"\)\.value = defaultCurFor\(kind\)/.test(js),
    "and both ship as the base — a template must not assume anyone's country");
+ok("a new line's rate is the rate of the currency it opened in",
+   /liFx"\)\.value\s*= rec \? rec\.fx : rateOf\(document\.getElementById\("liCur"\)\.value\)/.test(js)
+     && !/liFx"\)\.value\s*= rec \? rec\.fx : rateOf\(baseCur\(\)\)/.test(js),
+   "reading the base's rate put 1 under a line that opened in MXN — the line would be saved at par");
 ok("both defaults are settable",
    /id="defIncome"/.test(html) && /id="defExpense"/.test(html)
      && /function drawEntryDefaults\(list\)/.test(js)
