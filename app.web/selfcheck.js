@@ -597,10 +597,45 @@ ok("the menu closes on a click, an outside click and Escape",
      /<div class="modal-bg" id="pickBg">/.test(html),
      "the one observer that sets body.modal-open watches .modal-bg.open");
 }
-ok("the settings button opens the settings sheet",
-   /getElementById\("phoneSettings"\)\.addEventListener\("click", openSheet\)/.test(js)
+ok("the settings button opens the settings sheet, and closes it again",
+   /getElementById\("phoneSettings"\)\.addEventListener\("click", \(\) => sheetIsOpen\(\) \? closeSheet\(\) : openSheet\(\)\)/.test(js)
      && /<h3 id="sheetTitle">Settings<\/h3>/.test(html) && !/phoneMore/.test(html + js),
    "three dots say a menu exists; a cog says what is in it");
+// Settings is one of the bar's four places. A panel that covers the bar hides
+// the way back out of it — so it sits above the bar, and the bar sits above
+// its dim.
+ok("the settings panel leaves the bottom bar showing",
+   /#sheetBg\{[^}]*z-index:44/.test(flat) && /#phonebar\{[^}]*z-index:45/.test(flat)
+     && /box\.style\.marginBottom = \(window\.innerHeight - bar\.top \+ 8\) \+ "px"/.test(js.slice(js.indexOf("const openSheet"))),
+   "the bar's z-index must stay above the panel's background, and the panel is measured to sit above the bar");
+ok("any other tab closes settings before it acts",
+   /#phonebar \.pbtab:not\(#phoneSettings\)[\s\S]{0,160}if\(sheetIsOpen\(\) && !closeSheet\(\)\)/.test(js));
+
+// --- pages inside the phone's Settings ---------------------------------------
+// Currencies & rates and Edit rental open as pages of the panel, not as a second
+// window. They BORROW the dialog's own controls rather than copying them: one
+// rate input and one save path, so the phone cannot accept a rate the desktop
+// would refuse.
+{
+  ok("a settings page borrows the dialog's controls instead of copying them",
+     /function borrow\(el, slot\)/.test(js) && /function giveBack\(\)/.test(js)
+       && (html.match(/id="curRows"/g) || []).length === 1 && (html.match(/id="rName"/g) || []).length === 1,
+     "a second #curRows or #rName is a second set of rules to keep equal");
+  ok("rows in Settings open pages, not windows",
+     /getElementById\("sheetFx"\)\.addEventListener\("click", \(\) => \{ openFx\(true\); showSub\("fx"\); \}\)/.test(js)
+       && /openRental\(VIEW, true\); showSub\("rental"\)/.test(js)
+       && /if\(!inSheet\) document\.getElementById\("fxBg"\)\.classList\.add\("open"\)/.test(js)
+       && /if\(!inSheet\) document\.getElementById\("rentalBg"\)\.classList\.add\("open"\)/.test(js));
+  ok("currencies save as you go through the same saveFx",
+     /function fxChanged\(\)\{ if\(SUB === "fx"\) saveFx\(true\); \}/.test(js)
+       && /if\(stay\)\{ fxError\(""\); await load\(\); sheetSaved\(\); return; \}/.test(js),
+     "a separate autosave would be a second definition of a valid rate");
+  ok("edit rental will not drop unsaved changes",
+     /if\(SUB === "rental" && !force && rentalDirty\(\)\)\{ askRentalBar\(\); return false; \}/.test(js)
+       && /if\(!leaveSub\(\)\) return false;/.test(js)
+       && /if\(sheetIsOpen\(\) && !closeSheet\(\)\)\{ e\.stopImmediatePropagation\(\)/.test(js),
+     "Back, the cog, the × and another tab all ask first");
+}
 
 // --- currencies and rates -------------------------------------------------
 // The estimator used to keep the USD→GBP rate in localStorage, per device. Two

@@ -558,20 +558,145 @@
        stays on the heading line and the other drops below it, which reads as
        two unrelated controls. A full-width spacer breaks the line before both. */
     .cardhead .grow{flex:1 0 100%;height:0;min-width:0}
-    .sheet{display:block}
-    #sheetBg{align-items:flex-end;padding:0}
-    #sheetBg .modal{max-width:none;border-radius:16px 16px 0 0;border-bottom:0;
-         max-height:86vh;padding-bottom:calc(16px + env(safe-area-inset-bottom, 0px))}
-    @supports (height:100dvh){ #sheetBg .modal{max-height:86dvh} }
-    .srow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 2px}
-    .srow .sl{font-size:13px}
-    .srow select{width:auto}
-    .ssep{height:1px;background:var(--hair);margin:8px 0}
-    /* Styled by the same .rtools rules as the year row's copy — the links are
-       identical markup, so they must not be identical-looking by coincidence. */
-    #sheetRental{align-items:center;gap:8px;flex-wrap:wrap;padding:2px 2px 10px;
-         border-bottom:1px solid var(--hair);margin-bottom:8px;margin-left:0}
+    /* ---------- the settings panel ----------
+       A panel that floats above the bar, the same way the year / rentals picker
+       does, rather than a sheet welded to the bottom edge. The bar stays lit and
+       pressable on top of the dim — Settings is one of its four places, and a
+       place that hides the way back out of it is a dead end. Pressing Settings
+       again, or any other tab, is how you leave.
+
+       Inside: grouped cards on the page's own paper, the way the page itself is
+       built. Each group answers one question — this rental, how the page looks,
+       which currencies, where the backups are. */
+    .sheet{display:flex}
+    #sheetBg{align-items:flex-end;padding:0 14px;z-index:44;
+         background:color-mix(in srgb, var(--scrim) 60%, transparent)}
+    body.sheet-open #phonebar{z-index:46}
+    /* While it is open, Settings is the one place the bar marks as current;
+       the rental keeps its name, so where you will return to is still said. */
+    body.sheet-open .pbtab.on:not(#phoneSettings){background:none;font-weight:500}
+    @media (max-width:370px){ .seg svg{display:none} .seg button{padding:6px 9px} }
+    #sheetBox{flex:1;flex-direction:column;min-width:0;background:var(--paper);
+         border:1px solid var(--line);border-radius:22px;box-shadow:var(--pop);overflow:hidden;
+         animation:sheetIn .18s ease-out}
+    @keyframes sheetIn{from{opacity:0;transform:translateY(10px)}}
+    @media (prefers-reduced-motion:reduce){ #sheetBox{animation:none} }
+    .shead{display:flex;align-items:center;gap:10px;padding:14px 12px 4px 18px}
+    .shead h3{font-family:var(--serif);font-size:20px;margin:0;flex:1}
+    .sx{width:32px;height:32px;flex:none;border:0;border-radius:50%;background:var(--hair);
+         color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
+    .sx svg{width:16px;height:16px}
+    .sbody{overflow-y:auto;overscroll-behavior:contain;padding:0 12px 14px}
+    .sgh{display:flex;align-items:center;gap:7px;padding:14px 6px 6px;font-size:10.5px;
+         font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+    .sgh .rdot{width:9px;height:9px;border-radius:3px;flex:none}
+    .scard{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+    .sbody .scard > * + *{border-top:1px solid var(--hair)}
+    .sline{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:9px 12px;
+         background:none;border:0;font:inherit;font-size:14.5px;color:var(--ink);text-align:left;
+         text-decoration:none;cursor:pointer}
+    .sline:active{background:var(--soft)}
+    .sline:disabled{opacity:.6}
+    .sico{width:30px;height:30px;flex:none;border-radius:9px;display:flex;align-items:center;
+         justify-content:center;background:var(--focus);color:var(--profit)}
+    .sico svg{width:17px;height:17px;stroke-width:1.8}
+    .stxt{flex:1;min-width:0;display:flex;flex-direction:column}
+    .stxt small{font-size:12px;color:var(--muted);margin-top:1px;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .stxt small.ok{color:var(--in-ink)} .stxt small.bad{color:var(--danger-ink)}
+    .schev{flex:none;width:16px;height:16px;color:var(--muted);opacity:.7}
+    .sfield{display:flex;align-items:center;justify-content:space-between;gap:10px;
+         min-height:52px;padding:8px 12px;font-size:14.5px}
+    .sfield select{width:auto}
+    /* A segmented control: every choice visible, the current one raised. */
+    .seg{display:inline-flex;flex:none;gap:2px;padding:2px;background:var(--soft);
+         border:1px solid var(--line);border-radius:10px}
+    .seg button{display:inline-flex;align-items:center;gap:5px;border:0;background:none;
+         font:inherit;font-size:13px;padding:6px 10px;border-radius:8px;color:var(--muted);cursor:pointer}
+    .seg button.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:var(--lift)}
+    .seg svg{width:14px;height:14px}
+    .seg.mono button{font-family:var(--mono);font-size:12.5px}
+    /* The open rental: its note in words, then one tile per thing it links to. */
     #sheetRental:empty{display:none}
+    .snote{padding:11px 13px;font-size:13.5px;line-height:1.45;color:var(--ink);
+         white-space:pre-wrap;overflow-wrap:anywhere}
+    .snote b{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
+         color:var(--muted);font-weight:600;margin-bottom:2px}
+    .stiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(62px,1fr));padding:4px}
+    .stile{display:flex;flex-direction:column;align-items:center;gap:5px;padding:9px 2px 8px;
+         border:0;background:none;border-radius:10px;font:inherit;font-size:12px;color:var(--ink);
+         text-decoration:none;cursor:pointer;min-width:0}
+    .stile:active{background:var(--soft)}
+    .stile span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .sfoot{display:flex;align-items:center;gap:8px;padding:14px 6px 0;font-size:12px;color:var(--muted)}
+
+    /* ---------- pages inside Settings ----------
+       Currencies & rates and Edit rental open HERE, as a page of the panel,
+       rather than as a second window at the top of the screen. The bar stays,
+       "‹ Settings" is always in the same place, and leaving a page lands you
+       back where you came from instead of on the ledger.
+
+       The page borrows the real dialog's controls (see borrow()) — the same
+       inputs, the same ids, the same save and validation code — so the phone
+       and the desktop cannot drift into two different rules about what a valid
+       rate or a valid rental is. */
+    .sback{display:none;align-items:center;gap:2px;border:0;background:none;padding:6px 6px 6px 0;
+         font:inherit;font-size:15px;color:var(--profit);cursor:pointer;flex:none}
+    .sback svg{width:18px;height:18px}
+    #sheetBox.sub .sback{display:inline-flex}
+    #sheetBox.sub .shead{padding-left:12px}
+    #sheetBox.sub .shead h3{font-size:17px;text-align:center}
+    .sstat{font-size:12px;color:var(--in-ink);opacity:0;transition:opacity .25s;white-space:nowrap}
+    .sstat.show{opacity:1}
+    #sheetSub{display:none}
+    #sheetBox.sub #sheetMain{display:none}
+    #sheetBox.sub #sheetSub{display:block;animation:subIn .2s ease-out}
+    @keyframes subIn{from{opacity:0;transform:translateX(18px)}}
+    @media (prefers-reduced-motion:reduce){ #sheetBox.sub #sheetSub{animation:none} }
+    #sheetSub .err{margin:10px 0 0}
+    #sheetSub .snote2{font-size:12px;color:var(--muted);line-height:1.5;padding:10px 6px 0}
+    /* A borrowed form field, laid out as a row of a card. */
+    #sheetSub .field{margin:0;padding:11px 13px}
+    #sheetSub .field label{font-size:12px;color:var(--muted);margin-bottom:6px}
+    #sheetSub .field input,#sheetSub .field textarea{font-size:16px}
+    #sheetSub .fhint{display:none}
+    #sheetSub .swatches{gap:8px}
+    #sheetSub .sw{width:30px;height:30px}
+    /* The group heading already names these two. */
+    #sheetSub #fNote label,#sheetSub #baseWrap label{display:none}
+    /* Currencies: one row per currency. Code, symbol and its rate against the
+       base on one line, what fills the rate on the next. */
+    #sheetSub #curRows{display:block}
+    #sheetSub .currow{grid-template-columns:auto 62px 1fr auto;margin:0;padding:10px 8px 9px 13px;
+         align-items:center}
+    #sheetSub .currow + .currow{border-top:1px solid var(--hair)}
+    #sheetSub .currow .cc{border:0;background:none;padding:0;width:3.4em;font-weight:600;font-size:15px}
+    #sheetSub .currow .crwrap{display:flex;align-items:center;gap:6px;min-width:0}
+    #sheetSub .currow .cper{display:inline;font-family:var(--mono);font-size:12px;color:var(--muted);white-space:nowrap}
+    #sheetSub .currow .cr{min-width:0;flex:1}
+    #sheetSub .currow .curhint{margin-top:0}
+    #sheetSub .addcur{margin:0;padding:10px 13px}
+    #sheetSub .addcur label{font-size:12px;color:var(--muted);margin-bottom:6px}
+    #sheetSub #fxRefresh{display:flex;width:100%;justify-content:flex-start;border:0;border-radius:0;
+         background:none;min-height:50px;padding:9px 13px;font-size:14.5px;color:var(--profit)}
+    #sheetSub .defrow select{display:none}
+    #sheetSub .defrow.many select{display:block;width:auto}
+    #sheetSub .defrow.many .seg{display:none}
+    #sheetSub .wide{padding:11px 13px}
+    #sheetSub .wide label{font-size:12px;color:var(--muted);margin-bottom:6px}
+    #sheetSub .wide.locked select{display:none}
+    #sheetSub .wide.locked .curhint{font-size:13px;color:var(--ink);margin:0 !important}
+    /* Delete sits alone at the end, in red, away from Save. */
+    #sheetSub #rDelete{display:flex;width:100%;justify-content:center;border:0;border-radius:0;
+         background:none;min-height:50px;font-size:14.5px}
+    /* Edit rental's save bar: absent until something changes. */
+    .savebar{display:none;position:sticky;bottom:-14px;margin:12px -12px -14px;padding:10px 12px;
+         align-items:center;gap:8px;background:var(--surface);border-top:1px solid var(--line);
+         box-shadow:var(--lift)}
+    .savebar.show{display:flex}
+    .savebar .what{flex:1;font-size:13px;color:var(--muted);min-width:0}
+    .savebar.ask .what{color:var(--danger-ink);font-weight:600}
+    .savebar .go{background:var(--profit);color:var(--on-accent);border-color:var(--profit)}
   }
 
   /* ---------- profit-split panel ---------- */
@@ -627,6 +752,8 @@
        font-size:13px;margin-bottom:12px;display:none}
   .err.show{display:block}
   .currow{display:grid;grid-template-columns:80px 70px 1fr auto;gap:6px 8px;align-items:center;margin-bottom:10px}
+  .currow .crwrap{display:contents}
+  .currow .cper{display:none}
   .cdel{border:0;background:none;color:var(--muted);font-size:15px;cursor:pointer;padding:4px 6px;border-radius:6px}
   .cdel:hover{background:var(--soft);color:var(--tax)}
   .cdel:disabled{opacity:.25;cursor:default}
@@ -991,30 +1118,30 @@
         the name first. A snapshot is written before every change, which is the way back.</p>
     </div>
     <div class="err" id="rentalErr"></div>
-    <div class="field">
+    <div class="field" id="fName">
       <label for="rName">Name</label>
       <input id="rName" placeholder="Casa Verde" maxlength="60" />
     </div>
-    <div class="field">
+    <div class="field" id="fColor">
       <label>Colour</label>
       <div class="swatches" id="rColors"></div>
       <div class="fhint">Used for this rental everywhere it appears beside another one.</div>
     </div>
-    <div class="field">
+    <div class="field" id="fAirbnb">
       <label for="rAirbnb">Airbnb listing</label>
       <input id="rAirbnb" placeholder="https://www.airbnb.com/rooms/…" />
     </div>
-    <div class="field">
+    <div class="field" id="fDash">
       <label for="rDash">Dashboard</label>
       <input id="rDash" placeholder="https://…" />
       <div class="fhint">Wherever you manage bookings for this one.</div>
     </div>
-    <div class="field">
+    <div class="field" id="fNet">
       <label for="rNet">Internet</label>
       <input id="rNet" placeholder="http://192.168.…" />
       <div class="fhint">A local address is fine — links are stored, never opened by the app.</div>
     </div>
-    <div class="field">
+    <div class="field" id="fNote">
       <label for="rNote">Note</label>
       <textarea id="rNote" placeholder="Wi-Fi code, cleaner's number, boiler quirks…" maxlength="1000"></textarea>
     </div>
@@ -1066,36 +1193,83 @@
   <div id="pickBox" role="dialog" aria-modal="true" aria-label="Choose"></div>
 </div>
 
+<!-- Settings on a phone. It sits above the bar (see #sheetBox) so the bar is
+     still there to press — Settings again closes it, any other tab goes there. -->
 <div class="modal-bg" id="sheetBg">
-  <div class="modal sheet">
-    <div class="modalhead"><h3 id="sheetTitle">Settings</h3>
-      <button class="btn" id="sheetClose" aria-label="Close">Close</button></div>
-    <!-- The open rental's own things first: they are about where you are, and
-         everything below is about the app. -->
-    <div id="sheetRental"></div>
-    <div class="srow">
-      <span class="sl">Show amounts in</span>
-      <select id="sheetCur" class="mono" aria-label="Show amounts in"></select>
+  <div class="sheet" id="sheetBox" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="shead">
+      <button class="sback" id="sheetBack"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Settings</button>
+      <h3 id="sheetTitle">Settings</h3><span class="sstat" id="sheetStat" role="status"></span>
+      <button class="sx" id="sheetClose" aria-label="Close settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="sbody">
+     <div id="sheetMain">
+      <!-- The open rental's own things first: they are about where you are, and
+           everything below is about the app. Filled by renderRentalTools. -->
+      <div id="sheetRental"></div>
+
+      <div class="sgh">View</div>
+      <div class="scard">
+        <div class="sfield"><span>Show amounts in</span>
+          <span class="seg mono" id="sheetCurSeg" role="group" aria-label="Show amounts in"></span>
+          <select id="sheetCur" class="mono" aria-label="Show amounts in"></select></div>
+        <div class="sfield"><span>Appearance</span>
+          <span class="seg" id="sheetTheme" role="group" aria-label="Appearance"></span></div>
+      </div>
+
+      <div class="sgh">Currencies</div>
+      <div class="scard">
+        <button class="sline" id="sheetFx"><span class="sico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="M15.4 9.6A6 6 0 1 1 9.6 15.4"/><path d="M9 6.5v5M7 9h4"/></svg></span><span class="stxt">Currencies &amp; rates<small id="sheetFxSub"></small></span><svg class="schev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+        <button class="sline" id="sheetRates"><span class="sico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></span><span class="stxt">Update rates<small id="sheetRatesSub">From the European Central Bank</small></span></button>
+      </div>
+
+      <div class="sgh">Backups</div>
+      <div class="scard">
+        <a class="sline" href="/api/export" download><span class="sico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></span><span class="stxt">Save a backup<small>Download everything as one file</small></span></a>
+        <button class="sline" id="sheetLoad"><span class="sico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V9M7 14l5-5 5 5"/><path d="M5 4h14"/></svg></span><span class="stxt">Load a backup<small>Replace the ledger from a file</small></span><svg class="schev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+        <button class="sline" id="sheetRestore"><span class="sico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3 4v4.5h4.5"/><path d="M12 8v4.5l3 2"/></svg></span><span class="stxt">Restore a snapshot<small>Taken automatically before every change</small></span><svg class="schev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
+      </div>
+
+      <div class="mver sfoot" data-ver><span class="v"></span>
+        <button class="btn" data-checkupd>Check for updates</button></div>
+     </div>
+     <!-- A page of Settings. Filled by showSub() with the real dialog's own
+          controls, and emptied back into the dialog when you leave. -->
+     <div id="sheetSub"></div>
     </div>
-    <div class="srow">
-      <span class="sl">Appearance</span>
-      <button class="btn" id="sheetTheme"></button>
-    </div>
-    <div class="srow">
-      <span class="sl">Rates</span>
-      <button class="btn" id="sheetRates">↻ Update from the ECB</button>
-    </div>
-    <div class="ssep"></div>
-    <button class="mrow" id="sheetFx">⚙ Currencies &amp; rates</button>
-    <a class="mrow" href="/api/export" download>⬇ Save a backup</a>
-    <button class="mrow" id="sheetLoad">⬆ Load a backup</button>
-    <button class="mrow" id="sheetRestore">⟲ Restore a snapshot</button>
-    <div class="ssep"></div>
-    <button class="mrow" id="sheetAddRental">+ Rental</button>
-    <div class="mver" data-ver><span class="v"></span>
-      <button class="btn" data-checkupd>Check for updates</button></div>
   </div>
 </div>
+
+<!-- The two pages' layouts. Slots name the dialog element each one borrows. -->
+<template id="subFx">
+  <div data-slot="fxErr"></div>
+  <div class="sgh">Currencies</div>
+  <div class="scard"><div data-slot="curRows"></div><div data-slot="addcur"></div><div data-slot="fxRefresh"></div></div>
+  <div class="sgh">New lines start in</div>
+  <div class="scard">
+    <div class="sfield defrow" data-def="defIncome"><span>Income</span><span class="seg mono"></span><div data-slot="defIncome"></div></div>
+    <div class="sfield defrow" data-def="defExpense"><span>Expenses</span><span class="seg mono"></span><div data-slot="defExpense"></div></div>
+  </div>
+  <div class="sgh">Base currency</div>
+  <div class="scard"><div data-slot="baseWrap"></div></div>
+  <p class="snote2">Changes save as you make them. A rate only affects lines you add from now on —
+    every saved line keeps the rate it was recorded at.</p>
+</template>
+<template id="subRental">
+  <div data-slot="rentalErr"></div>
+  <div class="sgh">Rental</div>
+  <div class="scard"><div data-slot="fName"></div><div data-slot="fColor"></div></div>
+  <div class="sgh">Links</div>
+  <div class="scard"><div data-slot="fAirbnb"></div><div data-slot="fDash"></div><div data-slot="fNet"></div></div>
+  <div class="sgh">Note</div>
+  <div class="scard"><div data-slot="fNote"></div></div>
+  <div class="sgh">&nbsp;</div>
+  <div class="scard"><div data-slot="rDelete"></div></div>
+  <div class="savebar" id="rSaveBar">
+    <span class="what">Unsaved changes</span>
+    <button class="btn" id="rBarDiscard">Discard</button>
+    <button class="btn go" id="rBarSave">Save</button>
+  </div>
+</template>
 
 <!-- ===== Adding or editing a person =====
      The people the profit is divided between. Two names used to be written
@@ -1217,7 +1391,7 @@
       <select id="addCur" class="mono"></select>
     </div>
     <div class="fgrid">
-      <div class="wide">
+      <div class="wide" id="baseWrap">
         <label for="setBase">Base currency</label>
         <select id="setBase" class="mono"></select>
         <div class="curhint" id="baseNote" style="margin-top:6px"></div>
@@ -1680,6 +1854,14 @@ function renderDispCur(){
   el.value = dispCode();
   el2.innerHTML = el.innerHTML;
   el2.value = el.value;
+  // Up to four currencies fit as a segmented control, every one visible; past
+  // that the panel falls back to the dropdown rather than wrapping.
+  const seg = document.getElementById("sheetCurSeg");
+  const few = codes.length <= 4;
+  seg.style.display = few ? "" : "none";
+  el2.style.display = few ? "none" : "";
+  seg.innerHTML = few ? codes.map(c =>
+    `<button data-cur="${esc(c)}" class="${c === dispCode() ? "on" : ""}" aria-pressed="${c === dispCode()}">${esc(c)}</button>`).join("") : "";
 
   // Say so, plainly, whenever the figures on screen are not the ones on disk.
   const conv = dispCode() !== baseCur();
@@ -1741,12 +1923,17 @@ function renderRentalTools(){
   const cluster = noteBtn + links + (links ? `<span class="rsep"></span>` : "")
     + `<button class="btn ebtn" data-act="edit-rental">✎ Edit</button>`;
   tools.innerHTML = cluster;
-  // On a phone the year row has no room for this, so it goes in the sheet
-  // behind More — named, so it is clear which rental's links these are.
-  sheet.className = "rtools";
-  sheet.innerHTML = `<span class="pnamerow">
-      <span class="rdot" style="background:${esc(a.color)}"></span>
-      <b style="font-size:13px">${esc(a.name)}</b></span>` + cluster;
+  // On a phone the year row has no room for this, so it goes at the top of
+  // Settings — headed with the rental's name, so it is clear whose links these
+  // are. The note is written out in full rather than behind a toggle: the
+  // panel has the room, and a Wi-Fi code is read, not opened.
+  const PEN = `<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>`;
+  const tiles = ["airbnb","dashboard","internet"].filter(k => a.links[k]).map(k =>
+    `<a class="stile" href="${esc(a.links[k])}" target="_blank" rel="noopener noreferrer"><span class="sico">${I[k]}</span><span>${LABEL[k].replace(" listing", "")}</span></a>`).join("")
+    + `<button class="stile" data-act="edit-rental"><span class="sico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PEN}</svg></span><span>Edit</span></button>`;
+  sheet.className = "";
+  sheet.innerHTML = `<div class="sgh"><span class="rdot" style="background:${esc(a.color)}"></span>${esc(a.name)}</div>
+    <div class="scard">${a.note ? `<div class="snote"><b>Note</b>${esc(a.note)}</div>` : ""}<div class="stiles">${tiles}</div></div>`;
 
   const show = !!a.note && NOTE_OPEN;
   noteEl.style.display = show ? "" : "none";
@@ -2430,7 +2617,7 @@ function drawSwatches(){
     `<button class="sw${col === PICKED_COLOR ? " on" : ""}" data-color="${col}" style="background:${col}" aria-label="Colour ${col}"></button>`).join("");
 }
 
-function openRental(aptId){
+function openRental(aptId, inSheet){
   EDIT_RENTAL = aptId ? aptById(aptId) : null;
   const a = EDIT_RENTAL;
   // A new rental gets the first colour nothing else is using, so two rentals
@@ -2448,7 +2635,7 @@ function openRental(aptId){
   rentalError("");
   document.getElementById("rInfo").classList.remove("open");
   document.getElementById("rInfoBtn").setAttribute("aria-expanded", false);
-  document.getElementById("rentalBg").classList.add("open");
+  if(!inSheet) document.getElementById("rentalBg").classList.add("open");
 }
 const closeRental = () => document.getElementById("rentalBg").classList.remove("open");
 
@@ -2469,6 +2656,7 @@ async function saveRental(){
     : await post("/api/apartments", body);
   if(res.error){ rentalError("Not saved: " + res.error); return; }
   closeRental();
+  if(SUB === "rental"){ leaveSub(true); await load(); sheetSaved(); return; }   // back to Settings, saved
   await load();
   if(!EDIT_RENTAL) selectView(res.id);   // land on the rental you just made
 }
@@ -2594,6 +2782,7 @@ async function confirmRentalDelete(){
   closeRentalDelete();
   EDIT_RENTAL = null;
   VIEW = "overview";
+  if(SUB === "rental"){ leaveSub(true); closeSheet(); }
   await load();
 }
 
@@ -2657,8 +2846,8 @@ function drawCurRows(list){
     <div class="currow" data-i="${i}" data-code="${esc(c.code)}">
       <input class="mono cc" value="${esc(c.code)}" readonly aria-label="Currency code" />
       <input class="cs" value="${esc(c.symbol)}" maxlength="4" aria-label="Symbol for ${esc(c.code)}" />
-      <input class="mono cr" type="number" inputmode="decimal" step="0.01" value="${c.rate}"
-             placeholder="0.00" aria-label="Rate for ${esc(c.code)}"${isBase ? " readonly" : ""} />
+      <span class="crwrap"><span class="cper">1 ${esc(base)} =</span><input class="mono cr" type="number" inputmode="decimal" step="0.01" value="${c.rate}"
+             placeholder="0.00" aria-label="Rate for ${esc(c.code)}"${isBase ? " readonly" : ""} /></span>
       <button class="cdel" title="${isBase ? "The base currency cannot be removed" : "Remove " + esc(c.code)}"${isBase ? " disabled" : ""}>✕</button>
       <div class="curhint${cls ? " " + cls : ""}">${hint}</div>
     </div>`; }).join("");
@@ -2666,6 +2855,7 @@ function drawCurRows(list){
     const list2 = readCurRows();
     list2.splice(+b.parentElement.dataset.i, 1);
     drawCurRows(list2); drawBaseSelect(list2); drawCurPicker(list2); drawEntryDefaults(list2);
+    fxChanged();
   });
 }
 
@@ -2693,6 +2883,13 @@ function drawEntryDefaults(list){
     sel.innerHTML = list.map(c => `<option value="${esc(c.code)}">${esc(c.code)}</option>`).join("");
     sel.value = list.some(c => c.code === keep) ? keep
       : (list.some(c => c.code === baseCur()) ? baseCur() : (list[0] && list[0].code));
+    // The phone page shows the same choice as buttons while they fit.
+    const row = document.querySelector(`#sheetSub .defrow[data-def="${id}"]`);
+    if(row){
+      row.classList.toggle("many", list.length > 4);
+      row.querySelector(".seg").innerHTML = list.map(c =>
+        `<button data-code="${esc(c.code)}" class="${c.code === sel.value ? "on" : ""}" aria-pressed="${c.code === sel.value}">${esc(c.code)}</button>`).join("");
+    }
   });
 }
 
@@ -2707,6 +2904,7 @@ function drawBaseSelect(list){
   // dropdown covers the real need, which is *viewing* in another currency.
   const n = (DATA.income.length + DATA.expenses.length);
   sel.disabled = n > 0;
+  document.getElementById("baseWrap").classList.toggle("locked", n > 0);
   document.getElementById("baseNote").textContent = n
     ? `Locked: ${n} record${n > 1 ? "s are" : " is"} stored in ${baseCur()}. Use the currency dropdown in the header to view in another currency.`
     : "Can be changed while the ledger is empty.";
@@ -2719,12 +2917,12 @@ const readCurRows = () => [...document.querySelectorAll("#curRows .currow")].map
   rate: r.querySelector(".cr").value,
 }));
 
-function openFx(){
+function openFx(inSheet){
   const list = currencies().map(c => ({...c}));   // a working copy: Cancel really cancels
   document.getElementById("setBase").value = baseCur();
   drawCurRows(list); drawBaseSelect(list); drawCurPicker(list); drawEntryDefaults(list);
   fxError("");
-  document.getElementById("fxBg").classList.add("open");
+  if(!inSheet) document.getElementById("fxBg").classList.add("open");
 }
 const closeFx = () => document.getElementById("fxBg").classList.remove("open");
 
@@ -2736,7 +2934,7 @@ function fxError(msg){
   el.classList.toggle("show", !!msg);
 }
 
-async function saveFx(){
+async function saveFx(stay){
   const rows = readCurRows();
   const base = document.getElementById("setBase").value;
   // Same rule as every other number in the app: junk is refused, not read as 0.
@@ -2748,20 +2946,29 @@ async function saveFx(){
     expenses: document.getElementById("defExpense").value,
   }});
   if(r.error){ fxError("Not saved: " + r.error); return; }
+  if(stay){ fxError(""); await load(); sheetSaved(); return; }   // the phone page: saved, still here
   closeFx();
   await load();
 }
+// On the phone page every change is the save — there is no Save button to
+// forget. On the desktop dialog this does nothing: Save is still the save.
+function fxChanged(){ if(SUB === "fx") saveFx(true); }
 
 // ---- The one outbound request, on this button only --------------------------
 // The button's own label reports the result: no toast to miss, and no silent
 // failure. It reverts to "Rates" after a few seconds so the header settles back.
 const ratesBtn = () => document.getElementById("ratesBtn");
+const RATES_SUB = "From the European Central Bank";
 function ratesState(cls, text, revert){
   ratesBtn().className = "btn" + (cls ? " " + cls : "");
   document.getElementById("ratesLbl").textContent = text;
+  // The phone's row reports the same result in its second line.
+  const sub = document.getElementById("sheetRatesSub");
+  sub.className = cls; sub.textContent = text;
   if(revert) setTimeout(() => {
     ratesBtn().className = "btn";
     document.getElementById("ratesLbl").textContent = "Rates";
+    sub.className = ""; sub.textContent = RATES_SUB;
   }, 6000);
 }
 
@@ -2946,28 +3153,155 @@ document.getElementById("pickBg").addEventListener("click", e => {
   else if(b.dataset.act === "add-rental") openRental(null);
 });
 
+const sheetIsOpen = () => document.getElementById("sheetBg").classList.contains("open");
+
+// ---- pages inside Settings -------------------------------------------------
+// A page BORROWS the dialog's own elements and gives them back when you leave,
+// in reverse order so every "insert before" still has its neighbour. Nothing is
+// copied, so there is one rate input and one name input, not two to keep equal.
+let SUB = null;                 // "fx" | "rental" | null
+// The panel's heading is plain words by design — no icon — so it is not one of
+// the setTitle() headings that must keep theirs.
+const sheetHead = text => document.getElementById("sheetTitle").replaceChildren(text);
+const BORROWED = [];
+function borrow(el, slot){ BORROWED.push([el, el.parentNode, el.nextSibling]); slot.replaceWith(el); }
+function giveBack(){
+  while(BORROWED.length){ const [el, parent, next] = BORROWED.pop(); parent.insertBefore(el, next); }
+}
+function showSub(kind){
+  const sub = document.getElementById("sheetSub");
+  sub.innerHTML = "";
+  sub.appendChild(document.getElementById(kind === "fx" ? "subFx" : "subRental").content.cloneNode(true));
+  sub.querySelectorAll("[data-slot]").forEach(slot => {
+    const id = slot.dataset.slot;
+    borrow(id === "addcur" ? document.querySelector("#fxBg .addcur") : document.getElementById(id), slot);
+  });
+  SUB = kind;
+  if(kind === "fx") drawEntryDefaults(readCurRows());   // its buttons live on this page
+  document.getElementById("sheetBox").classList.add("sub");
+  sheetHead(kind === "fx" ? "Currencies & rates" : "Edit rental");
+  sub.closest(".sbody").scrollTop = 0;
+}
+// Leaving a page: back to the main one. Edit rental refuses while it holds
+// unsaved changes and asks instead — unless `force` (Save or Discard pressed).
+function leaveSub(force){
+  if(!SUB) return true;
+  if(SUB === "rental" && !force && rentalDirty()){ askRentalBar(); return false; }
+  giveBack();
+  document.getElementById("sheetSub").innerHTML = "";
+  document.getElementById("sheetBox").classList.remove("sub");
+  sheetHead("Settings");
+  SUB = null;
+  drawSheetFx();                         // the row says what the page just saved
+  return true;
+}
+function sheetSaved(){
+  const st = document.getElementById("sheetStat");
+  st.textContent = "Saved ✓"; st.classList.add("show");
+  clearTimeout(sheetSaved.t); sheetSaved.t = setTimeout(() => st.classList.remove("show"), 1800);
+}
+
+// Edit rental: what was there when the page opened, so the save bar can appear
+// on a real change and disappear again if it is typed back.
+let RENTAL_SNAP = "";
+const rentalState = () => JSON.stringify(["rName","rAirbnb","rDash","rNet","rNote"]
+  .map(id => document.getElementById(id).value).concat(PICKED_COLOR));
+const rentalDirty = () => SUB === "rental" && rentalState() !== RENTAL_SNAP;
+function drawRentalBar(){
+  const bar = document.getElementById("rSaveBar"); if(!bar) return;
+  bar.classList.toggle("show", rentalDirty());
+  bar.classList.remove("ask");
+  bar.querySelector(".what").textContent = "Unsaved changes";
+}
+function askRentalBar(){
+  const bar = document.getElementById("rSaveBar");
+  bar.classList.add("show", "ask");
+  bar.querySelector(".what").textContent = "Save your changes?";
+}
 const openSheet = () => {
-  document.getElementById("sheetBg").classList.add("open");
+  closePick();
+  document.getElementById("sheetStat").classList.remove("show");
+  const bg = document.getElementById("sheetBg");
+  bg.classList.add("open");
+  document.body.classList.add("sheet-open");
+  // Above the bar, measured as the picker is: the capsule's height follows its
+  // label's line box, so a guessed offset would sit on it or float off it.
+  const bar = document.getElementById("phonebar").getBoundingClientRect();
+  const box = document.getElementById("sheetBox");
+  box.style.marginBottom = (window.innerHeight - bar.top + 8) + "px";
+  box.style.maxHeight = Math.max(240, bar.top - 8 - 12) + "px";
   document.getElementById("phoneSettings").setAttribute("aria-expanded", true);
+  document.getElementById("phoneSettings").classList.add("on");
   drawSheetTheme();
+  drawSheetFx();
 };
 const closeSheet = () => {
+  if(!sheetIsOpen()) return true;
+  if(!leaveSub()) return false;          // Edit rental with unsaved changes asks first
   document.getElementById("sheetBg").classList.remove("open");
+  document.body.classList.remove("sheet-open");
   document.getElementById("phoneSettings").setAttribute("aria-expanded", false);
+  document.getElementById("phoneSettings").classList.remove("on");
+  return true;
 };
-// The appearance row says where you are and where the next press goes, same as
-// the header button — it just has the room to say it in words.
+// All three appearances side by side, the current one raised — on a phone
+// there is room to show the choice instead of cycling through it.
 function drawSheetTheme(){
-  const i = Math.max(0, THEME_MODES.findIndex(([m]) => m === themeMode()));
-  const [, label, icon] = THEME_MODES[i];
-  document.getElementById("sheetTheme").innerHTML =
-    `<svg class="tico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg> ${label}`;
+  const cur = themeMode();
+  document.getElementById("sheetTheme").innerHTML = THEME_MODES.map(([m, label, icon]) =>
+    `<button data-theme="${m}" class="${m === cur ? "on" : ""}" aria-pressed="${m === cur}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg>${label}</button>`).join("");
 }
-document.getElementById("phoneSettings").addEventListener("click", openSheet);
+// What "Currencies & rates" holds, so it is not a mystery row.
+function drawSheetFx(){
+  const base = baseCur();
+  const others = currencies().filter(c => c.code !== base).map(c => `${c.code} ${+c.rate}`);
+  document.getElementById("sheetFxSub").textContent =
+    `Base ${base}` + (others.length ? " · " + others.join(" · ") : " · no others yet");
+}
+// The cog toggles: the bar stays on top of the panel, so the button that
+// opened it is also the way out.
+document.getElementById("phoneSettings").addEventListener("click", () => sheetIsOpen() ? closeSheet() : openSheet());
+// Any other tab closes Settings first and then does its own job.
+document.querySelectorAll('#phonebar .pbtab:not(#phoneSettings)').forEach(b =>
+  b.addEventListener("click", e => {
+    if(sheetIsOpen() && !closeSheet()){ e.stopImmediatePropagation(); e.preventDefault(); }
+  }, true));
+document.getElementById("sheetBack").addEventListener("click", () => leaveSub());
+// Currencies save as you go: a typed rate or symbol on leaving the field, a
+// default or a removal the moment it happens.
+document.getElementById("sheetSub").addEventListener("change", e => {
+  if(SUB !== "fx") return;
+  if(e.target.matches("#curRows input, #defIncome, #defExpense, #setBase")) fxChanged();
+});
+document.getElementById("sheetSub").addEventListener("click", e => {
+  const b = e.target.closest(".defrow .seg button[data-code]"); if(!b) return;
+  const sel = document.getElementById(b.closest(".defrow").dataset.def);
+  sel.value = b.dataset.code;
+  drawEntryDefaults(readCurRows());
+  fxChanged();
+});
+// Edit rental: the bar follows every keystroke and every swatch.
+document.getElementById("sheetSub").addEventListener("input", () => { if(SUB === "rental") drawRentalBar(); });
+document.getElementById("sheetSub").addEventListener("click", e => {
+  if(SUB !== "rental") return;
+  if(e.target.closest("#rColors")) setTimeout(drawRentalBar);     // after the swatch handler
+  if(e.target.closest("#rBarSave")) saveRental();
+  if(e.target.closest("#rBarDiscard")){ openRental(VIEW, true); drawRentalBar(); }
+});
 document.getElementById("sheetClose").addEventListener("click", closeSheet);
 document.getElementById("sheetBg").addEventListener("click", e => { if(e.target.id === "sheetBg") closeSheet(); });
-document.getElementById("sheetTheme").addEventListener("click", () => { cycleTheme(); drawSheetTheme(); });
+document.getElementById("sheetTheme").addEventListener("click", e => {
+  const b = e.target.closest("button[data-theme]"); if(!b) return;
+  lsSet("rl-theme", b.dataset.theme);
+  applyTheme(b.dataset.theme);
+  drawSheetTheme();
+});
+document.getElementById("sheetCurSeg").addEventListener("click", e => {
+  const b = e.target.closest("button[data-cur]"); if(!b) return;
+  DISPLAY = b.dataset.cur === baseCur() ? null : b.dataset.cur;
+  render();
+});
 document.getElementById("sheetRates").addEventListener("click", refreshRates);
 document.getElementById("sheetCur").addEventListener("change", e => {
   DISPLAY = e.target.value === baseCur() ? null : e.target.value;
@@ -2975,17 +3309,15 @@ document.getElementById("sheetCur").addEventListener("change", e => {
 });
 // These close the sheet first: each opens a dialog, and a dialog on top of a
 // sheet is two layers of scrim and no way to tell which Escape closes.
-[["sheetFx", () => openFx()],
- ["sheetRestore", () => openRestore()],
- ["sheetAddRental", () => openRental(null)],
+document.getElementById("sheetFx").addEventListener("click", () => { openFx(true); showSub("fx"); });
+[["sheetRestore", () => openRestore()],
  ["sheetLoad", () => document.getElementById("fileInput").click()],
 ].forEach(([id, fn]) => document.getElementById(id).addEventListener("click", () => { closeSheet(); fn(); }));
 // The rental's own links and Edit live in the sheet on a phone.
 document.getElementById("sheetRental").addEventListener("click", e => {
   if(e.target.closest("a")) { closeSheet(); return; }
   const b = e.target.closest("button"); if(!b) return;
-  if(b.dataset.act === "edit-rental"){ closeSheet(); openRental(VIEW); }
-  if(b.dataset.act === "note"){ NOTE_OPEN = !NOTE_OPEN; closeSheet(); render(); }
+  if(b.dataset.act === "edit-rental"){ openRental(VIEW, true); showSub("rental"); RENTAL_SNAP = rentalState(); }
 });
 
 // The year row's right-hand cluster. A link is a link — it opens, and nothing
@@ -3178,12 +3510,14 @@ document.addEventListener("click", e => {
   if(!setMenu.contains(e.target) && e.target !== setMenuBtn) setMenu.classList.remove("open");
 });
 document.addEventListener("keydown", e => {
+  if(e.key === "Escape" && document.getElementById("rDelBg").classList.contains("open")){ closeRentalDelete(); return; }
+  if(e.key === "Escape" && SUB){ leaveSub(); return; }
   if(e.key === "Escape"){ setMenu.classList.remove("open"); closeFx(); closeRental(); closeRentalDelete(); closeLine();
     closePick(); closeSheet(); }
 });
 
 // --- Currency rate dialog ---------------------------------------------------
-document.getElementById("fxBtn").addEventListener("click", openFx);
+document.getElementById("fxBtn").addEventListener("click", () => openFx());
 // The explanation is one click away and stays out of the way until asked for.
 document.getElementById("fxInfoBtn").addEventListener("click", () => {
   const b = document.getElementById("fxInfoBtn");
@@ -3204,6 +3538,11 @@ document.getElementById("addCur").addEventListener("change", e => {
   }
   drawCurRows(list); drawBaseSelect(list); drawCurPicker(list); drawEntryDefaults(list);
   e.target.value = "";
+  // A new currency starts at 0 — not a rate the server accepts. Save once its
+  // rate is in (typed, or filled by Update), not before.
+  if(SUB === "fx") fxError(ECB.has(code)
+    ? `${code} added — press Update rates to fill its rate, or type one. It saves as soon as it has one.`
+    : `Type a rate for ${code} — it saves as soon as it has one.`);
 });
 // Viewing in another currency: a re-render, never a write.
 document.getElementById("dispCur").addEventListener("change", e => {
