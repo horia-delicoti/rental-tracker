@@ -537,7 +537,7 @@ const menuStart = html.indexOf('id="setMenu"');
 const menu = html.slice(menuStart, html.indexOf("\n        </div>", menuStart));
 ["fxBtn", "loadBtn", "restoreBtn"].forEach((id) =>
   ok("the menu offers " + id, new RegExp('id="' + id + '"').test(menu) && new RegExp('getElementById\\("' + id + '"\\)').test(js)));
-ok("saving a backup is a plain download link", /<a class="mrow" href="\/api\/export" download>/.test(menu),
+ok("saving a backup is a plain download link", /<a class="sline" role="menuitem" href="\/api\/export" download>/.test(menu),
    "a fetch cannot hand the browser a file to save");
 ok("the file picker sits outside the menu", /id="fileInput"/.test(html) && !/id="fileInput"/.test(menu),
    "the menu closes on any click inside it, and a picker removed mid-click never opens");
@@ -630,6 +630,16 @@ ok("any other tab closes settings before it acts",
      /function fxChanged\(\)\{ if\(SUB === "fx"\) saveFx\(true\); \}/.test(js)
        && /if\(stay\)\{ fxError\(""\); await load\(\); sheetSaved\(\); return; \}/.test(js),
      "a separate autosave would be a second definition of a valid rate");
+  ok("restoring a snapshot is a page of Settings too",
+     /id="subRestore"/.test(html) && /showSub\("restore"\); openRestore\(true\)/.test(js)
+       && /if\(!inSheet\) document\.getElementById\("restoreBg"\)\.classList\.add\("open"\)/.test(js)
+       && /getElementById\("restoreBtn"\)\.addEventListener\("click", \(\) => openRestore\(\)\)/.test(js),
+     "the desktop button must not hand its click event to openRestore as `inSheet`");
+  ok("the desktop menu uses the same settings rows as the phone",
+     /<div class="menu" id="setMenu" role="menu">\s*<div class="sgh">Currencies<\/div>/.test(html)
+       && (html.slice(html.indexOf('id="setMenu"'), html.indexOf('data-ver', html.indexOf('id="setMenu"'))).match(/class="sline"/g) || []).length === 4
+       && !/class="mrow"/.test(html.slice(html.indexOf('id="setMenu"'), html.indexOf('data-ver', html.indexOf('id="setMenu"')))),
+     "four rows — currencies, save, load, restore — each with its icon and second line");
   ok("edit rental will not drop unsaved changes",
      /if\(SUB === "rental" && !force && rentalDirty\(\)\)\{ askRentalBar\(\); return false; \}/.test(js)
        && /if\(!leaveSub\(\)\) return false;/.test(js)

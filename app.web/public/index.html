@@ -185,6 +185,34 @@
        background:var(--surface);border:1px solid var(--line);border-radius:11px;
        padding:6px;width:258px;box-shadow:var(--pop)}
   .menu.open{display:block}
+  /* ---------- a settings row ----------
+     One look for every settings row, on both screens: an icon in a tinted
+     square, what it is, and a second line saying what it holds or does. The
+     group label above says which kind of thing the rows are about. */
+  .sgh{display:flex;align-items:center;gap:7px;padding:14px 6px 6px;font-size:10.5px;
+       font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  .sline{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:9px 12px;
+       background:none;border:0;font:inherit;font-size:14.5px;color:var(--ink);text-align:left;
+       text-decoration:none;cursor:pointer}
+  .sline:active{background:var(--soft)}
+  .sline:disabled{opacity:.6}
+  .sico{width:30px;height:30px;flex:none;border-radius:9px;display:flex;align-items:center;
+       justify-content:center;background:var(--focus);color:var(--profit)}
+  .sico svg{width:17px;height:17px;stroke-width:1.8}
+  .stxt{flex:1;min-width:0;display:flex;flex-direction:column}
+  .stxt small{font-size:12px;color:var(--muted);margin-top:1px;
+       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stxt small.ok{color:var(--in-ink)} .stxt small.bad{color:var(--danger-ink)}
+  .schev{flex:none;width:16px;height:16px;color:var(--muted);opacity:.7}
+  /* The desktop menu: the same rows, sized for a pointer, grouped the same way. */
+  .menu{width:300px;padding:4px 6px 6px}
+  .menu .sgh{padding:10px 8px 4px}
+  .menu .sline{min-height:0;padding:8px;gap:11px;border-radius:9px;font-size:13.5px}
+  .menu .sline:hover{background:var(--soft)}
+  .menu .sico{width:28px;height:28px;border-radius:8px}
+  .menu .sico svg{width:16px;height:16px}
+  .menu .stxt small{font-size:11.5px}
+  .menu .mver{border-top:1px solid var(--hair);margin-top:6px;padding:10px 8px 4px}
   .mrow{display:block;width:100%;text-align:left;border:0;background:none;cursor:pointer;
        font-family:inherit;font-size:13.5px;color:var(--ink);padding:9px 10px;border-radius:7px;
        text-decoration:none}
@@ -269,7 +297,7 @@
     .rtools{margin-left:0;width:100%}
     /* The settings button is small enough to stay on the brand's row, so the
        views get the whole second line to themselves. */
-    .menu{width:min(260px,calc(100vw - 32px))}
+    .menu{width:min(300px,calc(100vw - 32px))}
   }
   /* ---------- rentals ---------- */
   /* The one button in the header row that creates something, so it is the only
@@ -587,24 +615,9 @@
          color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer}
     .sx svg{width:16px;height:16px}
     .sbody{overflow-y:auto;overscroll-behavior:contain;padding:0 12px 14px}
-    .sgh{display:flex;align-items:center;gap:7px;padding:14px 6px 6px;font-size:10.5px;
-         font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
     .sgh .rdot{width:9px;height:9px;border-radius:3px;flex:none}
     .scard{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
     .sbody .scard > * + *{border-top:1px solid var(--hair)}
-    .sline{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:9px 12px;
-         background:none;border:0;font:inherit;font-size:14.5px;color:var(--ink);text-align:left;
-         text-decoration:none;cursor:pointer}
-    .sline:active{background:var(--soft)}
-    .sline:disabled{opacity:.6}
-    .sico{width:30px;height:30px;flex:none;border-radius:9px;display:flex;align-items:center;
-         justify-content:center;background:var(--focus);color:var(--profit)}
-    .sico svg{width:17px;height:17px;stroke-width:1.8}
-    .stxt{flex:1;min-width:0;display:flex;flex-direction:column}
-    .stxt small{font-size:12px;color:var(--muted);margin-top:1px;
-         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .stxt small.ok{color:var(--in-ink)} .stxt small.bad{color:var(--danger-ink)}
-    .schev{flex:none;width:16px;height:16px;color:var(--muted);opacity:.7}
     .sfield{display:flex;align-items:center;justify-content:space-between;gap:10px;
          min-height:52px;padding:8px 12px;font-size:14.5px}
     .sfield select{width:auto}
@@ -655,6 +668,14 @@
     @media (prefers-reduced-motion:reduce){ #sheetBox.sub #sheetSub{animation:none} }
     #sheetSub .err{margin:10px 0 0}
     #sheetSub .snote2{font-size:12px;color:var(--muted);line-height:1.5;padding:10px 6px 0}
+    /* Restore: one row per snapshot, its time and size on the left, the action
+       on the right; the explanation under the list instead of over it. */
+    #sheetSub #snapList .snaprow{padding:9px 9px 9px 13px;margin:0;border-bottom:1px solid var(--hair)}
+    #sheetSub #snapList .snaprow:last-child{border-bottom:0}
+    #sheetSub #snapList .when{font-size:13px}
+    #sheetSub #snapList .btn{padding:6px 12px;font-size:13px}
+    #sheetSub #snapList .empty{padding:13px}
+    #sheetSub #restoreSub{font-size:12px;color:var(--muted);line-height:1.5;padding:10px 6px 0;margin:0}
     /* A borrowed form field, laid out as a row of a card. */
     #sheetSub .field{margin:0;padding:11px 13px}
     #sheetSub .field label{font-size:12px;color:var(--muted);margin-bottom:6px}
@@ -863,17 +884,18 @@
                 aria-label="Settings" title="Settings">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
+        <!-- Grouped and labelled the way the phone's Settings panel is — the same
+             rows, so the two screens describe the same things in the same words. -->
         <div class="menu" id="setMenu" role="menu">
-          <button class="mrow" id="fxBtn">⚙ Currency rate</button>
-          <div class="msep"></div>
+          <div class="sgh">Currencies</div>
+          <button class="sline" role="menuitem" id="fxBtn"><span class="sico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="6"/><path d="M15.4 9.6A6 6 0 1 1 9.6 15.4"/><path d="M9 6.5v5M7 9h4"/></svg></span><span class="stxt">Currencies &amp; rates<small id="menuFxSub"></small></span></button>
+          <div class="sgh">Backups</div>
           <!-- Save is a plain link to the export endpoint; `download` forces a file save -->
-          <a class="mrow" href="/api/export" download>⬇ Save a backup</a>
+          <a class="sline" role="menuitem" href="/api/export" download><span class="sico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5"/><path d="M5 20h14"/></svg></span><span class="stxt">Save a backup<small>Download everything as one file</small></span></a>
           <!-- Load opens a hidden file picker (wired up in JS below) -->
-          <button class="mrow" id="loadBtn">⬆ Load a backup</button>
+          <button class="sline" role="menuitem" id="loadBtn"><span class="sico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20V9M7 14l5-5 5 5"/><path d="M5 4h14"/></svg></span><span class="stxt">Load a backup<small>Replace the ledger from a file</small></span></button>
           <!-- Restore lists the server's rolling snapshots (auto-taken before every change) -->
-          <button class="mrow" id="restoreBtn">⟲ Restore a snapshot</button>
-          <div class="msep"></div>
-          <div class="msep"></div>
+          <button class="sline" role="menuitem" id="restoreBtn"><span class="sico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3 4v4.5h4.5"/><path d="M12 8v4.5l3 2"/></svg></span><span class="stxt">Restore a snapshot<small>Taken automatically before every change</small></span></button>
           <div class="mver" data-ver><span class="v"></span>
             <button class="btn" data-checkupd>Check for updates</button></div>
         </div>
@@ -1254,6 +1276,11 @@
   <p class="snote2">Changes save as you make them. A rate only affects lines you add from now on —
     every saved line keeps the rate it was recorded at.</p>
 </template>
+<template id="subRestore">
+  <div class="sgh">Snapshots</div>
+  <div class="scard"><div data-slot="snapList"></div></div>
+  <div data-slot="restoreSub"></div>
+</template>
 <template id="subRental">
   <div data-slot="rentalErr"></div>
   <div class="sgh">Rental</div>
@@ -1421,7 +1448,7 @@
       <h3 data-icon="restore" data-icon-color="--profit">Restore a snapshot</h3>
       <button class="btn" id="restoreCancel">Close</button>
     </div>
-    <div class="sub">The server saves a snapshot before every change and keeps the last 30. Restoring replaces the current data; the current state is snapshotted first, so you can undo a restore.</div>
+    <div class="sub" id="restoreSub">The server saves a snapshot before every change and keeps the last 30. Restoring replaces the current data; the current state is snapshotted first, so you can undo a restore.</div>
     <div id="snapList"></div>
   </div>
 </div>
@@ -2566,7 +2593,7 @@ function selectFY(fy){ FY = fy; LOPEN = false; render(); }
 
 // ---- Snapshot restore (the server's rolling backups, see /api/backups) ----
 // Fetch the snapshot list and show the modal.
-async function openRestore(){
+async function openRestore(inSheet){
   const list = await (await fetch("/api/backups")).json();
   const fmt = iso => iso.replace("T"," ").slice(0,19);   // "2026-07-03 10:15:30"
   document.getElementById("snapList").innerHTML = list.length
@@ -2577,7 +2604,7 @@ async function openRestore(){
         <button class="btn" data-snap="${s.name}">Restore</button>
       </div>`).join("")
     : `<div class="empty">No snapshots yet — one is created automatically on every change.</div>`;
-  document.getElementById("restoreBg").classList.add("open");
+  if(!inSheet) document.getElementById("restoreBg").classList.add("open");
 }
 
 // Replace the store with one snapshot (server snapshots the current state first).
@@ -2586,6 +2613,8 @@ async function restoreSnap(name){
   const r = await post("/api/restore", {name});
   if(r.error){ alert("Restore failed: " + r.error); return; }
   document.getElementById("restoreBg").classList.remove("open");
+  // From the phone's page: back to Settings, saying what just happened.
+  if(SUB === "restore"){ leaveSub(true); await load(); sheetSaved("Restored ✓"); return; }
   await load();
 }
 
@@ -3159,7 +3188,7 @@ const sheetIsOpen = () => document.getElementById("sheetBg").classList.contains(
 // A page BORROWS the dialog's own elements and gives them back when you leave,
 // in reverse order so every "insert before" still has its neighbour. Nothing is
 // copied, so there is one rate input and one name input, not two to keep equal.
-let SUB = null;                 // "fx" | "rental" | null
+let SUB = null;                 // "fx" | "rental" | "restore" | null
 // The panel's heading is plain words by design — no icon — so it is not one of
 // the setTitle() headings that must keep theirs.
 const sheetHead = text => document.getElementById("sheetTitle").replaceChildren(text);
@@ -3171,7 +3200,8 @@ function giveBack(){
 function showSub(kind){
   const sub = document.getElementById("sheetSub");
   sub.innerHTML = "";
-  sub.appendChild(document.getElementById(kind === "fx" ? "subFx" : "subRental").content.cloneNode(true));
+  const TPL = {fx: "subFx", rental: "subRental", restore: "subRestore"};
+  sub.appendChild(document.getElementById(TPL[kind]).content.cloneNode(true));
   sub.querySelectorAll("[data-slot]").forEach(slot => {
     const id = slot.dataset.slot;
     borrow(id === "addcur" ? document.querySelector("#fxBg .addcur") : document.getElementById(id), slot);
@@ -3179,7 +3209,7 @@ function showSub(kind){
   SUB = kind;
   if(kind === "fx") drawEntryDefaults(readCurRows());   // its buttons live on this page
   document.getElementById("sheetBox").classList.add("sub");
-  sheetHead(kind === "fx" ? "Currencies & rates" : "Edit rental");
+  sheetHead({fx: "Currencies & rates", rental: "Edit rental", restore: "Restore a snapshot"}[kind]);
   sub.closest(".sbody").scrollTop = 0;
 }
 // Leaving a page: back to the main one. Edit rental refuses while it holds
@@ -3195,9 +3225,9 @@ function leaveSub(force){
   drawSheetFx();                         // the row says what the page just saved
   return true;
 }
-function sheetSaved(){
+function sheetSaved(text){
   const st = document.getElementById("sheetStat");
-  st.textContent = "Saved ✓"; st.classList.add("show");
+  st.textContent = text || "Saved ✓"; st.classList.add("show");
   clearTimeout(sheetSaved.t); sheetSaved.t = setTimeout(() => st.classList.remove("show"), 1800);
 }
 
@@ -3256,8 +3286,9 @@ function drawSheetTheme(){
 function drawSheetFx(){
   const base = baseCur();
   const others = currencies().filter(c => c.code !== base).map(c => `${c.code} ${+c.rate}`);
-  document.getElementById("sheetFxSub").textContent =
-    `Base ${base}` + (others.length ? " · " + others.join(" · ") : " · no others yet");
+  const text = `Base ${base}` + (others.length ? " · " + others.join(" · ") : " · no others yet");
+  document.getElementById("sheetFxSub").textContent = text;
+  document.getElementById("menuFxSub").textContent = text;
 }
 // The cog toggles: the bar stays on top of the panel, so the button that
 // opened it is also the way out.
@@ -3310,8 +3341,9 @@ document.getElementById("sheetCur").addEventListener("change", e => {
 // These close the sheet first: each opens a dialog, and a dialog on top of a
 // sheet is two layers of scrim and no way to tell which Escape closes.
 document.getElementById("sheetFx").addEventListener("click", () => { openFx(true); showSub("fx"); });
-[["sheetRestore", () => openRestore()],
- ["sheetLoad", () => document.getElementById("fileInput").click()],
+// Restore is a page too: shown at once, filled when the list arrives.
+document.getElementById("sheetRestore").addEventListener("click", () => { showSub("restore"); openRestore(true); });
+[ ["sheetLoad", () => document.getElementById("fileInput").click()],
 ].forEach(([id, fn]) => document.getElementById(id).addEventListener("click", () => { closeSheet(); fn(); }));
 // The rental's own links and Edit live in the sheet on a phone.
 document.getElementById("sheetRental").addEventListener("click", e => {
@@ -3411,7 +3443,7 @@ document.getElementById("calcUse").addEventListener("click", applyEstimate);
 document.getElementById("calcBg").addEventListener("click", e => { if(e.target.id === "calcBg") closeCalc(); }); // click backdrop to close
 
 // Snapshot-restore modal: open, pick a snapshot (delegated), close.
-document.getElementById("restoreBtn").addEventListener("click", openRestore);
+document.getElementById("restoreBtn").addEventListener("click", () => openRestore());
 document.getElementById("restoreCancel").addEventListener("click", () => document.getElementById("restoreBg").classList.remove("open"));
 document.getElementById("restoreBg").addEventListener("click", e => { if(e.target.id === "restoreBg") document.getElementById("restoreBg").classList.remove("open"); }); // click backdrop to close
 document.getElementById("snapList").addEventListener("click", e => {
@@ -3500,6 +3532,7 @@ const setMenu = document.getElementById("setMenu"), setMenuBtn = document.getEle
 setMenuBtn.addEventListener("click", e => {
   e.stopPropagation();
   setMenuBtn.setAttribute("aria-expanded", setMenu.classList.toggle("open"));
+  drawSheetFx();
 });
 // Any click inside the menu is a chosen action, so close on the way through —
 // except on the version row, which reports its result in place.
